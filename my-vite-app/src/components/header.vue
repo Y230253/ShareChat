@@ -1,14 +1,25 @@
 <script setup>
-import {defineProps} from 'vue';
+import { useRouter, useRoute } from 'vue-router'
+import {defineProps,ref, computed, onMounted, onUnmounted } from 'vue';
+const router = useRouter()
+const route = useRoute()
 const props = defineProps({
   toggleSidebar: Function
 });
+const goToRegister = () => {
+  console.log("Navigating to /register")
+  router.push('/register').catch(err => console.error(err))
+}
+const goToLogin = () => {
+  console.log("Navigating to /login")
+  router.push('/login').catch(err => console.error(err))
+}
 </script>
 <template>
     <header class="header">
       <button class="menu-btn" @click="toggleSidebar">☰</button>  
-      <button class="register" @click="register">新規登録</button>
-      <button class="login" @click="login">ログイン</button>
+      <button class="register" @click="goToRegister"><router-link to="/register">新規登録</router-link></button>
+      <button class="login" @click="goToLogin"><router-link to="login">ログイン</router-link></button>
       <h1>📷 ShareChat 💬</h1>
     </header>
   </template>
