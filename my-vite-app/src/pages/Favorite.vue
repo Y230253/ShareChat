@@ -26,7 +26,7 @@ const isSidebarOpen = ref(false)
 const toggleSidebar = () => {
   isSidebarOpen.value = !isSidebarOpen.value
 }
-const checkWindowSize = () => {
+const checkWindowSize = () => { 
   if(window.innerWidth > 768){
     isSidebarOpen.value = true
   } else {
