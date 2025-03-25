@@ -87,24 +87,32 @@ async function writeData(data) {
 // 🔹 ユーザー登録 API（JSON版）
 app.post('/register', async (req, res) => {
   const { username, email, password } = req.body;
-  // 簡易: メール形式のチェック（正規表現）
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    return res.status(400).json({ error: '不正なメールアドレスです' });
+  if (!username || !email || !password) {
+    return res.status(400).json({ error: '全てのフィールドが必要です' });
   }
+
+  const userData = await readUserData();
+
+  // 同じメールアドレスがないか重複チェック
+  if (userData.users.some(user => user.email === email)) {
+    return res.status(400).json({ error: '既に登録されています' });
+  }
+
   try {
-    const data = await readUserData();
-    if (data.users.some(user => user.email === email)) {
-      return res.status(400).json({ error: 'メールが既に存在します' });
-    }
+    // パスワードのハッシュ化
     const hashedPassword = await bcrypt.hash(password, 10);
-    const id = data.users.length > 0 ? data.users[data.users.length - 1].id + 1 : 1;
-    const newUser = { id, username, email, password: hashedPassword };
-    data.users.push(newUser);
-    await writeUserData(data);
-    res.json({ userId: id });
-  } catch (err) {
-    res.status(500).json({ error: '登録失敗' });
+    const newUser = {
+      id: userData.users.length ? userData.users[userData.users.length - 1].id + 1 : 1,
+      username,
+      email,
+      password: hashedPassword
+    };
+    userData.users.push(newUser);
+    await writeUserData(userData);
+    return res.status(201).json({ message: '登録成功' });
+  } catch (error) {
+    console.error('登録エラー:', error);
+    return res.status(500).json({ error: 'サーバーエラーが発生しました' });
   }
 });
 

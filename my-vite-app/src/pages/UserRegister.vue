@@ -78,17 +78,33 @@ const router = useRouter()
   const toggleSidebar = () => {
     isSidebarOpen.value = !isSidebarOpen.value
   }
-  const handleRegister = () => {
+  const handleRegister = async () => {
     if (password.value !== confirmPassword.value) {
       alert('パスワードが一致しません。')
       return
     }
-    // ここでユーザー登録処理を実装する（API呼び出しなど）
-    console.log('ユーザー登録情報:', {
-      username: username.value,
-      email: email.value,
-      password: password.value,
-    })
+    try {
+      const res = await fetch('http://localhost:3000/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: username.value,
+          email: email.value,
+          password: password.value
+        })
+      })
+      if (!res.ok) {
+        const errorData = await res.json()
+        alert(errorData.error || '登録に失敗しました')
+        return
+      }
+      // 登録が成功した場合、ログインページへの遷移などを実装
+      alert('登録が完了しました')
+      router.push('/login')
+    } catch (err) {
+      console.error('登録エラー:', err)
+      alert('ネットワークエラーが発生しました')
+    }
   }
   </script>
   
@@ -158,4 +174,3 @@ const router = useRouter()
     background-color: #1b5e20;
   }
   </style>
-  
