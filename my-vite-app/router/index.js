@@ -9,8 +9,7 @@ const routes = [
   { path: '/', component: Home, meta: { layout: 'default', showPhotoList: true } },
   { path: '/favorite', component: Favorite, meta: { layout: 'favorite', showPhotoList: true } },
   { path: '/posts', component: PostForm, meta: { layout: 'default', showPhotoList: false } },
- // { path: '/login', component: Login, meta: { layout: 'default', showPhotoList: true } },
- // { path: '/register', component: Register, meta: { layout: 'default', showPhotoList: true } },
+  { path: '/register', component: UserRegister, meta: { layout: 'default', showPhotoList: true } },
 ]
 
 const router = createRouter({
