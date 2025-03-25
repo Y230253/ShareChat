@@ -1,4 +1,10 @@
-{"users":[
-  
-]
-  }
+{
+  "users": [
+    {
+      "id": 1,
+      "username": "ぺのむ",
+      "email": "2004asano@gmail.com",
+      "password": "$2b$10$SvChoh8YhQc21obAMa5z.eD3Zi.XHDdxFZsSNw/Vzmryp7Rub9MdS"
+    }
+  ]
+}

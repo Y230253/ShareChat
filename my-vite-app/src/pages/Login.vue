@@ -17,6 +17,12 @@
   </template>
   
   <script>
+  import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import Header from '../components/Header.vue'
+import Sidebar from '../components/Sidebar.vue'
+
+const router = useRouter()
   export default {
     name: 'Login'
   }
