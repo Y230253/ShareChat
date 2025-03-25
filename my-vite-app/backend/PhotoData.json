@@ -1,0 +1,67 @@
+{
+  "users": [],
+  "posts": [
+    {
+      "id": 1,
+      "user_id": 1,
+      "image_url": "/uploads/1742882516532.png",
+      "message": "あ",
+      "created_at": "2025-03-25T06:01:56.939Z",
+      "likeCount": 0,
+      "bookmarkCount": 0
+    },
+    {
+      "id": 2,
+      "user_id": 1,
+      "image_url": "/uploads/1742882537855.png",
+      "message": "あｓｇ",
+      "created_at": "2025-03-25T06:02:18.255Z",
+      "likeCount": 0,
+      "bookmarkCount": 0
+    },
+    {
+      "id": 3,
+      "user_id": 1,
+      "image_url": "/uploads/1742882834869.png",
+      "message": "ぱすつながれー",
+      "created_at": "2025-03-25T06:07:15.251Z",
+      "likeCount": 0,
+      "bookmarkCount": 0
+    }
+  ],
+  "likes": [
+    {
+      "id": 1,
+      "user_id": 1,
+      "post_id": 2
+    },
+    {
+      "id": 2,
+      "user_id": 1,
+      "post_id": 1
+    },
+    {
+      "id": 3,
+      "user_id": 1,
+      "post_id": 3
+    }
+  ],
+  "bookmarks": [
+    {
+      "id": 1,
+      "user_id": 1,
+      "post_id": 2
+    },
+    {
+      "id": 2,
+      "user_id": 1,
+      "post_id": 1
+    },
+    {
+      "id": 3,
+      "user_id": 1,
+      "post_id": 3
+    }
+  ],
+  "comments": []
+}
