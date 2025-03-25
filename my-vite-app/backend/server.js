@@ -16,6 +16,26 @@ const app = express();
 // 修正: dataFile のパスを PhotoData.json に変更
 const dataFile = path.join(__dirname, 'PhotoData.json');
 
+// 追加: ユーザーデータ用のファイルパスとヘルパー関数
+const userDataFile = path.join(__dirname, 'UserData.json');
+
+async function readUserData() {
+  try {
+    const content = await fs.readFile(userDataFile, 'utf8');
+    return JSON.parse(content);
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      const defaultData = { users: [] };
+      await writeUserData(defaultData);
+      return defaultData;
+    }
+    throw error;
+  }
+}
+async function writeUserData(data) {
+  await fs.writeFile(userDataFile, JSON.stringify(data, null, 2));
+}
+
 app.use(cors());
 app.use(express.json());
 
@@ -67,8 +87,13 @@ async function writeData(data) {
 // 🔹 ユーザー登録 API（JSON版）
 app.post('/register', async (req, res) => {
   const { username, email, password } = req.body;
+  // 簡易: メール形式のチェック（正規表現）
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ error: '不正なメールアドレスです' });
+  }
   try {
-    const data = await readData();
+    const data = await readUserData();
     if (data.users.some(user => user.email === email)) {
       return res.status(400).json({ error: 'メールが既に存在します' });
     }
@@ -76,7 +101,7 @@ app.post('/register', async (req, res) => {
     const id = data.users.length > 0 ? data.users[data.users.length - 1].id + 1 : 1;
     const newUser = { id, username, email, password: hashedPassword };
     data.users.push(newUser);
-    await writeData(data);
+    await writeUserData(data);
     res.json({ userId: id });
   } catch (err) {
     res.status(500).json({ error: '登録失敗' });
