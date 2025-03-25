@@ -128,15 +128,24 @@ app.post('/register', async (req, res) => {
   }
 });
 
-// 🔹 ユーザーログイン API（JSON版）
+// 🔹 ユーザーログイン API（JSON版）の変更
 app.post('/login', async (req, res) => {
   const { email, password } = req.body
   try {
     const usersData = await readUserData()
-    const user = usersData.users.find(u => u.email === email)
+    console.log('Received email:', email)
+    console.log('UserData:', usersData)
+    // trim()で余分な空白を除去して比較
+    const user = usersData.users.find(u => u.email.trim() === email.trim())
     if (!user) return res.status(400).json({ error: 'ユーザーが見つかりません' })
-    const isValid = await bcrypt.compare(password, user.password)
-    if (!isValid) return res.status(401).json({ error: 'パスワードが間違っています' })
+    // 入力されたパスワードのハッシュを、登録済みパスワードのsaltから作成
+    const salt = user.password.substring(0,100)
+    console.log('Salt:', salt)
+    
+    const hashedInput = await bcrypt.hash(password)
+    if (hashedInput !== salt) {
+      return res.status(401).json({ error: 'パスワードが間違っています' })
+    }
     const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '1h' })
     res.json({ token })
   } catch (err) {
