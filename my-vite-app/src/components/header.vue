@@ -89,7 +89,7 @@ const props = defineProps({
   -webkit-transform: skew(0);
   transform: skew(0);
   font-size : 33px;
-  color: #ffffff98;
+  color: #ffffff;
   background-color: transparent;
   cursor: pointer;           /* カーソルをポインターに変更 */
 }
