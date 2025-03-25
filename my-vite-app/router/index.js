@@ -10,6 +10,7 @@ const routes = [
   { path: '/favorite', component: Favorite, meta: { layout: 'favorite', showPhotoList: true } },
   { path: '/posts', component: PostForm, meta: { layout: 'default', showPhotoList: false } },
   { path: '/register', component: UserRegister, meta: { layout: 'default', showPhotoList: true } },
+  { path: '/login', component: Login, meta: { layout: 'default', showPhotoList: true } },
 ]
 
 const router = createRouter({
