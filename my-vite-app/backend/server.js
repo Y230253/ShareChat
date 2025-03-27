@@ -48,19 +48,50 @@ const storage = multer.diskStorage({
     cb(null, Date.now() + path.extname(file.originalname));
   }
 });
-const upload = multer({ storage: storage });
 
-// 画像アップロードAPIのエラーハンドリングを追加
+// ファイルフィルター - 画像と動画の両方を許可
+const fileFilter = (req, file, cb) => {
+  // 許可するMIMEタイプ
+  const allowedMimeTypes = [
+    // 画像
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp', 
+    // 動画
+    'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo'
+  ];
+  
+  if (allowedMimeTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('サポートしていないファイル形式です。画像または動画ファイルをアップロードしてください。'), false);
+  }
+};
+
+const upload = multer({ 
+  storage: storage,
+  fileFilter: fileFilter,
+  limits: {
+    fileSize: 100 * 1024 * 1024 // 100MB上限
+  }
+});
+
+// 画像・動画アップロードAPIのエラーハンドリングを追加
 app.post('/upload', (req, res, next) => {
   upload.single('file')(req, res, function(err) {
     if (err) {
       console.error("Multer error:", err);
-      return res.status(500).json({ error: 'アップロードに失敗しました' });
+      return res.status(500).json({ error: err.message || 'アップロードに失敗しました' });
     }
     if (!req.file) {
       return res.status(400).json({ error: 'ファイルが選択されていません' });
     }
-    res.json({ imageUrl: `/uploads/${req.file.filename}` });
+    
+    // ファイルタイプ（画像または動画）を判別
+    const isVideo = req.file.mimetype.startsWith('video/');
+    
+    res.json({ 
+      imageUrl: `/uploads/${req.file.filename}`,
+      isVideo: isVideo
+    });
   });
 });
 app.use('/uploads', express.static('D:/uploads'));
@@ -219,10 +250,11 @@ app.get('/users/:id', authenticateToken, async (req, res) => {
 app.post('/posts', authenticateToken, async (req, res) => {
   console.log('投稿処理開始:', req.user.id)
   
-  const { image_url, message } = req.body
+  const { image_url, message, isVideo } = req.body
   console.log('投稿内容:', { 
     image_url: image_url ? image_url.substring(0, 20) + '...' : '未設定', 
-    message: message ? message.substring(0, 20) + '...' : '未設定'
+    message: message ? message.substring(0, 20) + '...' : '未設定',
+    isVideo: isVideo || false
   })
   
   try {
@@ -248,13 +280,14 @@ app.post('/posts', authenticateToken, async (req, res) => {
       relativeImageUrl = req.protocol + '://' + req.get('host') + relativeImageUrl
     }
     
-    // 投稿データにユーザー名を追加
+    // 投稿データにユーザー名とメディアタイプを追加
     const newPost = { 
       id, 
       user_id, 
       username: user.username, // ユーザー名を明示的に保存
       image_url: relativeImageUrl, 
-      message, 
+      message,
+      isVideo: isVideo || false, // 動画かどうかのフラグ
       created_at: new Date().toISOString(), 
       likeCount: 0,
       bookmarkCount: 0
