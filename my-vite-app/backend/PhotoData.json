@@ -4,89 +4,28 @@
     {
       "id": 1,
       "user_id": 1,
-      "image_url": "http://localhost:3000/uploads/1743057165444.jpg",
-      "message": "大阪",
-      "created_at": "2025-03-27T06:32:45.497Z",
+      "username": "ぺのむ",
+      "user_icon": "http://localhost:3000/uploads/1743074430244.png",
+      "image_url": "http://localhost:3000/uploads/1743074461101.mp4",
+      "message": "テスト",
+      "isVideo": true,
+      "created_at": "2025-03-27T11:21:32.471Z",
       "likeCount": 0,
       "bookmarkCount": 0
     },
     {
       "id": 2,
-      "user_id": 1,
-      "image_url": "http://localhost:3000/uploads/1743059983905.jpg",
-      "message": "大阪",
-      "created_at": "2025-03-27T07:19:43.957Z",
-      "likeCount": 0,
-      "bookmarkCount": 0
-    },
-    {
-      "id": 3,
-      "user_id": 1,
-      "image_url": "http://localhost:3000/uploads/1743061701332.jpg",
-      "message": "あｓ",
-      "created_at": "2025-03-27T07:48:21.368Z",
-      "likeCount": 0,
-      "bookmarkCount": 0
-    },
-    {
-      "id": 4,
       "user_id": 1,
       "username": "ぺのむ",
-      "image_url": "http://localhost:3000/uploads/1743061979627.jpg",
-      "message": "てｓｔ",
-      "created_at": "2025-03-27T07:52:59.694Z",
-      "likeCount": 0,
-      "bookmarkCount": 0
-    },
-    {
-      "id": 5,
-      "user_id": 2,
-      "username": "test1",
-      "image_url": "http://localhost:3000/uploads/1743062106965.jpg",
-      "message": "test",
-      "created_at": "2025-03-27T07:55:07.039Z",
-      "likeCount": 0,
-      "bookmarkCount": 0
-    },
-    {
-      "id": 6,
-      "user_id": 2,
-      "username": "test1",
-      "image_url": "http://localhost:3000/uploads/1743062157405.mkv",
-      "message": "movietest",
-      "created_at": "2025-03-27T07:55:57.536Z",
+      "user_icon": "http://localhost:3000/uploads/1743074430244.png",
+      "image_url": "http://localhost:3000/uploads/1743074504511.png",
+      "message": "",
+      "isVideo": false,
+      "created_at": "2025-03-27T11:21:44.993Z",
       "likeCount": 0,
       "bookmarkCount": 0
     }
   ],
-  "likes": [
-    {
-      "id": 1,
-      "user_id": 1,
-      "post_id": 2
-    },
-    {
-      "id": 2,
-      "user_id": 2,
-      "post_id": 2
-    },
-    {
-      "id": 3,
-      "user_id": 2,
-      "post_id": 1
-    }
-  ],
-  "bookmarks": [
-    {
-      "id": 1,
-      "user_id": 1,
-      "post_id": 2
-    },
-    {
-      "id": 2,
-      "user_id": 2,
-      "post_id": 2
-    }
-  ],
+  "likes": [],
   "comments": []
 }

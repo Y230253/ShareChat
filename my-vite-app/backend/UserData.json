@@ -4,13 +4,8 @@
       "id": 1,
       "username": "ぺのむ",
       "email": "2004asano@gmail.com",
-      "password": "$2b$10$SvChoh8YhQc21obAMa5z.eD3Zi.XHDdxFZsSNw/Vzmryp7Rub9MdS"
-    },
-    {
-      "id": 2,
-      "username": "test1",
-      "email": "peteimu0721@gmail.com",
-      "password": "$2b$10$eJWCFSJSZ0FunpAheupEE.e5JowocUBue2iYp/gjdLqAOFvrKb5pu"
+      "password": "$2b$10$./FO/tUfJOz7LSAZR9vlZO1rksFAR1KHXEmwOz86tXal5gdJ/nTiG",
+      "icon_url": "http://localhost:3000/uploads/1743074430244.png"
     }
   ]
 }

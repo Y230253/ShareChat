@@ -1,5 +1,5 @@
 <script setup>
-import { defineProps, ref, onMounted } from 'vue'
+import { defineProps, ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import authStore from '../authStore.js'
 
@@ -176,12 +176,22 @@ onMounted(async () => {
     }
   }
 })
+
+// ユーザーアイコンのコンピューテッドプロパティ
+const userIconUrl = computed(() => {
+  if (props.photo.user_icon) {
+    return props.photo.user_icon;
+  }
+  return 'https://via.placeholder.com/40'; // デフォルトアイコン
+});
 </script>
 
 <template>
   <div class="photo-card">
     <div class="user-info">
-      <img :src="photo.userIcon || 'https://via.placeholder.com/40'" class="user-icon" alt="User Icon">
+      <div class="user-icon-container">
+        <img :src="userIconUrl" class="user-icon" alt="User Icon">
+      </div>
       <div>
         <p class="username">{{ photo.username || ('ユーザー ' + photo.user_id) }}</p>
         <p class="date">{{ new Date(photo.created_at).toLocaleString('ja-JP') }}</p>
@@ -261,12 +271,21 @@ onMounted(async () => {
   align-items: center;
   margin-bottom: 10px;
 }
-.user-icon {
+
+.user-icon-container {
   width: 40px;
   height: 40px;
   border-radius: 50%;
+  overflow: hidden;
   margin-right: 10px;
 }
+
+.user-icon {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .username {
   font-weight: bold;
 }

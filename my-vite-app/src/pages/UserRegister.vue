@@ -4,8 +4,21 @@
     <div class="main-wrapper">
       <Sidebar :isOpen="isSidebarOpen" />
       <div class="user-register-container">
-        <form @submit.prevent="handleRegister" class="register-form">
+        <form @submit.prevent="handleRegister" class="register-form" enctype="multipart/form-data">
           <h1>ユーザー登録</h1>
+          
+          <div class="form-group">
+            <label for="icon">プロフィール画像</label>
+            <input
+              id="icon"
+              type="file"
+              @change="handleIconChange"
+              accept="image/*"
+            />
+            <div v-if="iconPreview" class="icon-preview">
+              <img :src="iconPreview" alt="アイコンプレビュー" />
+            </div>
+          </div>
           
           <div class="form-group">
             <label for="username">ユーザーネーム</label>
@@ -66,6 +79,10 @@
           </div>
           
           <button type="submit" class="submit-btn">登録する</button>
+          
+          <div v-if="errorMessage" class="error-message">
+            {{ errorMessage }}
+          </div>
         </form>
       </div>
     </div>
@@ -85,6 +102,11 @@ const password = ref('')
 const confirmPassword = ref('')
 const isSidebarOpen = ref(false)
 const showPassword = ref(false)
+const errorMessage = ref('')
+
+// アイコン画像関連
+const iconFile = ref(null)
+const iconPreview = ref('')
 
 const toggleSidebar = () => {
   isSidebarOpen.value = !isSidebarOpen.value
@@ -94,37 +116,57 @@ const togglePassword = () => {
   showPassword.value = !showPassword.value
 }
 
+const handleIconChange = (event) => {
+  const file = event.target.files[0]
+  if (file) {
+    iconFile.value = file
+    iconPreview.value = URL.createObjectURL(file)
+  }
+}
+
 const handleRegister = async () => {
-  if (password.value !== confirmPassword.value) {
-    alert('パスワードが一致しません。')
-    return
-  }
-  // 半角英数字かつ8文字以上のバリデーション
-  const passwordRegex = /^[A-Za-z0-9]{8,}$/
-  if (!passwordRegex.test(password.value)) {
-    alert('パスワードは半角英数字かつ8文字以上で入力してください。')
-    return
-  }
   try {
-    const res = await fetch('http://localhost:3000/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username: username.value,
-        email: email.value,
-        password: password.value
-      })
-    })
-    if (!res.ok) {
-      const errorData = await res.json()
-      alert(errorData.error || '登録に失敗しました')
+    errorMessage.value = ''
+    
+    if (password.value !== confirmPassword.value) {
+      errorMessage.value = 'パスワードが一致しません。'
       return
     }
+    // 半角英数字かつ8文字以上のバリデーション
+    const passwordRegex = /^[A-Za-z0-9]{8,}$/
+    if (!passwordRegex.test(password.value)) {
+      errorMessage.value = 'パスワードは半角英数字かつ8文字以上で入力してください。'
+      return
+    }
+
+    // FormDataを使用してマルチパートフォームデータを構築
+    const formData = new FormData()
+    formData.append('username', username.value)
+    formData.append('email', email.value)
+    formData.append('password', password.value)
+    
+    // アイコン画像があれば追加
+    if (iconFile.value) {
+      formData.append('icon', iconFile.value)
+    }
+    
+    const res = await fetch('http://localhost:3000/register', {
+      method: 'POST',
+      body: formData // Content-Typeはブラウザが自動設定
+    })
+    
+    const data = await res.json()
+    
+    if (!res.ok) {
+      errorMessage.value = data.error || '登録に失敗しました'
+      return
+    }
+    
     alert('登録が完了しました')
     router.push('/login')
   } catch (err) {
     console.error('登録エラー:', err)
-    alert('ネットワークエラーが発生しました')
+    errorMessage.value = 'ネットワークエラーが発生しました'
   }
 }
 </script>
@@ -208,5 +250,29 @@ const handleRegister = async () => {
 
 .submit-btn:hover {
   background-color: #1b5e20;
+}
+
+/* アイコンプレビュー用スタイル */
+.icon-preview {
+  margin-top: 10px;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  overflow: hidden;
+  margin-left: auto;
+  margin-right: auto;
+  border: 2px solid #a5d6a7;
+}
+
+.icon-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.error-message {
+  color: #d32f2f;
+  margin-top: 1rem;
+  text-align: center;
 }
 </style>

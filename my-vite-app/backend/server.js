@@ -68,10 +68,8 @@ const fileFilter = (req, file, cb) => {
 
 const upload = multer({ 
   storage: storage,
-  fileFilter: fileFilter,
-  limits: {
-    fileSize: 100 * 1024 * 1024 // 100MB上限
-  }
+  fileFilter: fileFilter
+  // ファイルサイズ制限を削除
 });
 
 // 画像・動画アップロードAPIのエラーハンドリングを追加
@@ -151,8 +149,8 @@ function authenticateToken(req, res, next) {
   })
 }
 
-// 🔹 ユーザー登録 API（JSON版）
-app.post('/register', async (req, res) => {
+// 🔹 ユーザー登録 API - アイコンアップロード対応に修正
+app.post('/register', upload.single('icon'), async (req, res) => {
   const { username, email, password } = req.body;
   if (!username || !email || !password) {
     return res.status(400).json({ error: '全てのフィールドが必要です' });
@@ -168,11 +166,21 @@ app.post('/register', async (req, res) => {
   try {
     // パスワードのハッシュ化
     const hashedPassword = await bcrypt.hash(password, 10);
+    
+    // アイコン画像のURL処理
+    let iconUrl = null;
+    if (req.file) {
+      iconUrl = `/uploads/${req.file.filename}`;
+      // 絶対URLに変換
+      iconUrl = req.protocol + '://' + req.get('host') + iconUrl;
+    }
+    
     const newUser = {
       id: userData.users.length ? userData.users[userData.users.length - 1].id + 1 : 1,
       username,
       email,
-      password: hashedPassword
+      password: hashedPassword,
+      icon_url: iconUrl // アイコンURLを保存
     };
     userData.users.push(newUser);
     await writeUserData(userData);
@@ -183,7 +191,7 @@ app.post('/register', async (req, res) => {
   }
 });
 
-// 🔹 ユーザーログイン API（JSON版）の変更
+// 🔹 ユーザーログイン API - アイコンURLも返すように修正
 app.post('/login', async (req, res) => {
   const { email, password } = req.body
   try {
@@ -216,7 +224,8 @@ app.post('/login', async (req, res) => {
     const userData = {
       id: user.id,
       username: user.username,
-      email: user.email
+      email: user.email,
+      icon_url: user.icon_url || null // アイコンURLも返す
     }
     
     res.json({ token, user: userData })
@@ -280,11 +289,12 @@ app.post('/posts', authenticateToken, async (req, res) => {
       relativeImageUrl = req.protocol + '://' + req.get('host') + relativeImageUrl
     }
     
-    // 投稿データにユーザー名とメディアタイプを追加
+    // 投稿データにユーザー名とアイコン、メディアタイプを追加
     const newPost = { 
       id, 
       user_id, 
       username: user.username, // ユーザー名を明示的に保存
+      user_icon: user.icon_url || null, // ユーザーアイコンURLを追加
       image_url: relativeImageUrl, 
       message,
       isVideo: isVideo || false, // 動画かどうかのフラグ
@@ -321,7 +331,7 @@ app.get('/posts', async (req, res) => {
       const user = userData.users.find(u => u.id === post.user_id);
       if (user) {
         post.username = user.username;
-        // アイコンパスなどがあれば追加
+        post.user_icon = user.icon_url || null; // アイコンURLも追加
       }
       
       // いいね・ブックマーク数のカウント
