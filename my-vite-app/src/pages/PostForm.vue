@@ -209,12 +209,13 @@ const handleCancel = () => {
 <style scoped>
 .post-form {
   max-width: 600px;
-  margin: 2rem auto;
+  margin: 1rem auto;
   padding: 2rem;
   border: 1px solid #ccc;
   border-radius: 8px;
-  background-color: #fff;
+  background-color: #a7a7a7;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  height:900px;
 }
 .post-form h1 {
   text-align: center;

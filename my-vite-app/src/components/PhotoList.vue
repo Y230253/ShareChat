@@ -40,7 +40,13 @@ const loadPosts = async () => {
     if (!res.ok) {
       throw new Error('投稿の取得に失敗しました');
     }
-    photos.value = await res.json();
+    const data = await res.json();
+    console.log('投稿取得成功:', data);
+    if (Array.isArray(data)) {
+      photos.value = data.reverse();
+    } else {
+      throw new Error('投稿データが不正です');
+    }
   } catch (err) {
     console.error('投稿取得エラー', err);
     error.value = err.message;
@@ -98,6 +104,7 @@ watch(() => props.sidebarOpen, () => {
 <style scoped>
 li {
   list-style: none;
+  margin:25px;
 }
 img {
   width: 100%;

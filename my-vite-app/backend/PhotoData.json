@@ -6,10 +6,10 @@
       "user_id": 1,
       "username": "ぺのむ",
       "user_icon": "http://localhost:3000/uploads/1743074430244.png",
-      "image_url": "http://localhost:3000/uploads/1743074461101.mp4",
+      "image_url": "http://localhost:3000/uploads/1743074759917.mp4",
       "message": "テスト",
       "isVideo": true,
-      "created_at": "2025-03-27T11:21:32.471Z",
+      "created_at": "2025-03-27T11:26:30.170Z",
       "likeCount": 0,
       "bookmarkCount": 0
     },
@@ -18,14 +18,39 @@
       "user_id": 1,
       "username": "ぺのむ",
       "user_icon": "http://localhost:3000/uploads/1743074430244.png",
-      "image_url": "http://localhost:3000/uploads/1743074504511.png",
+      "image_url": "http://localhost:3000/uploads/1743074854821.png",
       "message": "",
       "isVideo": false,
-      "created_at": "2025-03-27T11:21:44.993Z",
+      "created_at": "2025-03-27T11:27:35.281Z",
+      "likeCount": 0,
+      "bookmarkCount": 0
+    },
+    {
+      "id": 3,
+      "user_id": 1,
+      "username": "ぺのむ",
+      "user_icon": "http://localhost:3000/uploads/1743074430244.png",
+      "image_url": "http://localhost:3000/uploads/1743077650493.png",
+      "message": "うぇあｄ",
+      "isVideo": false,
+      "created_at": "2025-03-27T12:14:10.621Z",
+      "likeCount": 0,
+      "bookmarkCount": 0
+    },
+    {
+      "id": 4,
+      "user_id": 1,
+      "username": "ぺのむ",
+      "user_icon": "http://localhost:3000/uploads/1743074430244.png",
+      "image_url": "http://localhost:3000/uploads/1743077669453.png",
+      "message": "蜜月",
+      "isVideo": false,
+      "created_at": "2025-03-27T12:14:29.545Z",
       "likeCount": 0,
       "bookmarkCount": 0
     }
   ],
   "likes": [],
+  "bookmarks": [],
   "comments": []
 }

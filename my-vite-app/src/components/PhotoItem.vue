@@ -226,10 +226,10 @@ const userIconUrl = computed(() => {
     <div class="actions">
       <p v-if="errorMsg" class="error-message">{{ errorMsg }}</p>
       <button @click="toggleLike" :class="{ 'active': liked }">
-        {{ liked ? '❤️ いいね済' : '🤍 いいね' }} ({{ likeCount }})
+        {{ liked ? '❤️' : '🤍' }} ({{ likeCount }})
       </button>
       <button @click="toggleBookmarkAction" :class="{ 'active': isBookmarked }">
-        {{ isBookmarked ? '📌 ブックマーク済' : '🔖 ブックマーク' }} ({{ bookmarkCount }})
+        {{ isBookmarked ? '📌' : '🔖' }} ({{ bookmarkCount }})
       </button>
     </div>
   </div>
@@ -240,10 +240,10 @@ const userIconUrl = computed(() => {
   width: 100%;
   max-width: 500px;
   background: white;
-  padding: 15px;
+  padding: 30px;
   border-radius: 10px;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-  margin-bottom: 20px;
+  margin-bottom: 10px;
 }
 
 .media-container {
