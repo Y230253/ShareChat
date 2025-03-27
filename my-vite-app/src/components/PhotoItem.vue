@@ -154,8 +154,8 @@ onMounted(async () => {
     const token = localStorage.getItem('token')
     
     try {
-      // この投稿をユーザーがいいね済みかチェック
-      const likesRes = await fetch(`${apiUrl}/likes/check/${props.photo.id}`, {
+      // この投稿をユーザーがいいね済みかチェック - URLを修正
+      const likesRes = await fetch(`${apiUrl}/check-like/${props.photo.id}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       if (likesRes.ok) {
@@ -163,8 +163,8 @@ onMounted(async () => {
         liked.value = likesData.liked
       }
       
-      // この投稿をユーザーがブックマーク済みかチェック
-      const bookmarksRes = await fetch(`${apiUrl}/bookmarks/check/${props.photo.id}`, {
+      // この投稿をユーザーがブックマーク済みかチェック - URLを修正
+      const bookmarksRes = await fetch(`${apiUrl}/check-bookmark/${props.photo.id}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       if (bookmarksRes.ok) {

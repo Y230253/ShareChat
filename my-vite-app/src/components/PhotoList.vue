@@ -1,6 +1,7 @@
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import PhotoItem from "./PhotoItem.vue";
+import authStore from '../authStore.js';
 
 const props = defineProps({
   sidebarOpen: {
@@ -10,6 +11,11 @@ const props = defineProps({
 });
 
 const photos = ref([]); // 取得した投稿を格納
+const isLoading = ref(true);
+const error = ref(null);
+
+// ログイン状態を監視
+const isLoggedIn = computed(() => authStore.isLoggedIn.value);
 
 const columns = ref(props.sidebarOpen ? 3 : 4);
 
@@ -24,17 +30,39 @@ const updateColumns = () => {
   }
 };
 
+// 投稿を読み込む関数
+const loadPosts = async () => {
+  isLoading.value = true;
+  error.value = null;
+  
+  try {
+    const res = await fetch('http://localhost:3000/posts');
+    if (!res.ok) {
+      throw new Error('投稿の取得に失敗しました');
+    }
+    photos.value = await res.json();
+  } catch (err) {
+    console.error('投稿取得エラー', err);
+    error.value = err.message;
+  } finally {
+    isLoading.value = false;
+  }
+};
+
 onMounted(() => {
   window.addEventListener('resize', updateColumns);
   updateColumns();
-
-  // 追加: 投稿一覧をバックエンドから取得
-  fetch('http://localhost:3000/posts')
-    .then(res => res.json())
-    .then(data => {
-      photos.value = data;
-    })
-    .catch(err => console.error('投稿取得エラー', err));
+  
+  // 投稿データを読み込む
+  loadPosts();
+  
+  // ログイン状態の変化を監視
+  watch(() => authStore.isLoggedIn.value, (newVal) => {
+    if (newVal) {
+      // ログインしたら投稿を再読み込み（いいね/ブックマーク状態を反映するため）
+      loadPosts();
+    }
+  });
 });
 
 onUnmounted(() => {
@@ -49,7 +77,17 @@ watch(() => props.sidebarOpen, () => {
 <template>
   <div>
     <h1>Photo List📸</h1>
-    <ul :style="{ display: 'grid', gap: '1rem', gridTemplateColumns: `repeat(${columns}, 1fr)` }">
+    
+    <div v-if="isLoading" class="loading">
+      <p>読み込み中...</p>
+    </div>
+    
+    <div v-else-if="error" class="error">
+      <p>{{ error }}</p>
+      <button @click="loadPosts">再読み込み</button>
+    </div>
+    
+    <ul v-else :style="{ display: 'grid', gap: '1rem', gridTemplateColumns: `repeat(${columns}, 1fr)` }">
       <li v-for="photo in photos" :key="photo.id">
         <photoItem :photo="photo" />
       </li>
@@ -64,5 +102,12 @@ li {
 img {
   width: 100%;
   height: auto;
+}
+.loading, .error {
+  text-align: center;
+  padding: 20px;
+}
+.error {
+  color: red;
 }
 </style>

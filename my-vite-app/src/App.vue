@@ -1,9 +1,11 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import Header from './components/header.vue';
 import Sidebar from './components/Sidebar.vue';
 import PhotoList from './components/PhotoList.vue';
 import { useRoute } from 'vue-router';
+import authStore from './authStore.js';
+
 const count = ref(0);
 const isSidebarOpen = ref(false);
 const route = useRoute();
@@ -28,6 +30,7 @@ const checkWindowSize = () => {
 onMounted(() => {
   window.addEventListener('resize', checkWindowSize);
   checkWindowSize();
+  authStore.initAuth();
 });
 
 onUnmounted(() => {
