@@ -41,54 +41,39 @@ const toggleSidebar = () => {
 
 const handleLogin = async () => {
   try {
+    console.log('ログイン試行中:', email.value)
+    
     const res = await fetch('http://localhost:3000/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: email.value, password: password.value })
     })
+    
+    // レスポンス処理を改善
+    const data = await res.json()
+    
     if (!res.ok) {
-      const errData = await res.json()
-      errorMsg.value = errData.error || 'ログインエラー'
+      console.error('ログイン失敗:', data)
+      errorMsg.value = data.error || 'ログインエラー'
       return
     }
-    const data = await res.json()
+    
+    console.log('ログイン成功:', data)
+    
     // トークンを保存
     localStorage.setItem('token', data.token)
     
-    // ユーザー情報を取得（サーバーからのレスポンスにユーザー情報が含まれている場合）
+    // ユーザー情報を保存
     if (data.user) {
-      // サーバーからユーザー情報が直接返された場合
+      console.log('ユーザー情報を保存:', data.user)
       authStore.setUser(data.user)
+      router.push('/')
     } else {
-      // トークンから情報を抽出（簡易的な実装）
-      try {
-        const payload = JSON.parse(atob(data.token.split('.')[1]))
-        // ユーザーIDとメールアドレスを取得
-        const user = {
-          id: payload.id,
-          email: payload.email
-        }
-        // ユーザー名を取得するAPI呼び出し
-        const userRes = await fetch(`http://localhost:3000/users/${user.id}`, {
-          headers: {
-            'Authorization': `Bearer ${data.token}`
-          }
-        })
-        if (userRes.ok) {
-          const userData = await userRes.json()
-          user.username = userData.username
-        }
-        // 認証ストアにユーザー情報を保存
-        authStore.setUser(user)
-      } catch (err) {
-        console.error('トークン解析エラー:', err)
-      }
+      errorMsg.value = 'ユーザー情報が不足しています'
     }
-    
-    router.push('/')
   } catch (err) {
-    console.error('ログインエラー:', err)
-    errorMsg.value = 'ネットワークエラー'
+    console.error('ログイン処理エラー:', err)
+    errorMsg.value = 'ネットワークエラー: ' + err.message
   }
 }
 </script>

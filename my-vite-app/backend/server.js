@@ -84,8 +84,8 @@ async function writeData(data) {
   await fs.writeFile(dataFile, JSON.stringify(data, null, 2));
 }
 
-// JWT秘密鍵の設定（環境変数がない場合はデフォルト値を使用）
-const JWT_SECRET = process.env.JWT_SECRET || 'default_jwt_secret_for_development';
+// JWT秘密鍵の設定 - 直接値を設定してデバッグ
+const JWT_SECRET = 'sharechat_app_secret_key_1234567890';
 
 // 追加: 認証ミドルウェア
 function authenticateToken(req, res, next) {
@@ -138,24 +138,29 @@ app.post('/login', async (req, res) => {
     const usersData = await readUserData()
     console.log('Received email:', email)
     console.log('UserData:', usersData)
-    // trim()で余分な空白を除去して比較
+    
     const user = usersData.users.find(u => u.email.trim() === email.trim())
     if (!user) return res.status(400).json({ error: 'ユーザーが見つかりません' })
     
-    // パスワードの検証をbcrypt.compareで実施
+    // bcryptでパスワードを検証
     const isValid = await bcrypt.compare(password, user.password)
     if (!isValid) {
       return res.status(401).json({ error: 'パスワードが間違っています' })
     }
     
-    // JWTトークンを発行（JWT_SECRETを使用）
+    console.log('パスワード検証成功、トークン生成開始')
+    console.log('JWT_SECRET:', JWT_SECRET) // デバッグ用
+    
+    // JWTトークンを生成（直接JWT_SECRET変数を使用）
     const token = jwt.sign(
-      { id: user.id, email: user.email }, 
-      JWT_SECRET, // process.env.JWT_SECRETをJWT_SECRETに変更
+      { id: user.id, email: user.email },
+      JWT_SECRET,
       { expiresIn: '1h' }
     )
     
-    // ユーザー情報をレスポンスに含める（パスワードは除外）
+    console.log('トークン生成成功:', token.substring(0, 20) + '...')
+    
+    // ユーザー情報を返す
     const userData = {
       id: user.id,
       username: user.username,
@@ -165,7 +170,7 @@ app.post('/login', async (req, res) => {
     res.json({ token, user: userData })
   } catch (err) {
     console.error('Login error:', err)
-    res.status(500).json({ error: 'ログインエラー' })
+    res.status(500).json({ error: 'ログインエラー: ' + err.message })
   }
 })
 
