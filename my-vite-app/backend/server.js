@@ -84,12 +84,15 @@ async function writeData(data) {
   await fs.writeFile(dataFile, JSON.stringify(data, null, 2));
 }
 
+// JWT秘密鍵の設定（環境変数がない場合はデフォルト値を使用）
+const JWT_SECRET = process.env.JWT_SECRET || 'default_jwt_secret_for_development';
+
 // 追加: 認証ミドルウェア
 function authenticateToken(req, res, next) {
   const authHeader = req.headers.authorization
   if (!authHeader) return res.status(401).json({ error: 'トークンがありません' })
   const token = authHeader.split(' ')[1]
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+  jwt.verify(token, JWT_SECRET, (err, user) => { // process.env.JWT_SECRETをJWT_SECRETに変更
     if (err) return res.status(403).json({ error: '無効なトークン' })
     req.user = user
     next()
@@ -138,18 +141,51 @@ app.post('/login', async (req, res) => {
     // trim()で余分な空白を除去して比較
     const user = usersData.users.find(u => u.email.trim() === email.trim())
     if (!user) return res.status(400).json({ error: 'ユーザーが見つかりません' })
-    // 入力されたパスワードのハッシュを、登録済みパスワードのsaltから作成
-    const salt = user.password.substring(0,100)
-    console.log('Salt:', salt)
     
-    const hashedInput = await bcrypt.hash(password)
-    if (hashedInput !== salt) {
+    // パスワードの検証をbcrypt.compareで実施
+    const isValid = await bcrypt.compare(password, user.password)
+    if (!isValid) {
       return res.status(401).json({ error: 'パスワードが間違っています' })
     }
-    const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '1h' })
-    res.json({ token })
+    
+    // JWTトークンを発行（JWT_SECRETを使用）
+    const token = jwt.sign(
+      { id: user.id, email: user.email }, 
+      JWT_SECRET, // process.env.JWT_SECRETをJWT_SECRETに変更
+      { expiresIn: '1h' }
+    )
+    
+    // ユーザー情報をレスポンスに含める（パスワードは除外）
+    const userData = {
+      id: user.id,
+      username: user.username,
+      email: user.email
+    }
+    
+    res.json({ token, user: userData })
   } catch (err) {
+    console.error('Login error:', err)
     res.status(500).json({ error: 'ログインエラー' })
+  }
+})
+
+// 追加: ユーザー情報取得API
+app.get('/users/:id', authenticateToken, async (req, res) => {
+  try {
+    const userData = await readUserData()
+    const user = userData.users.find(u => u.id === parseInt(req.params.id))
+    if (!user) return res.status(404).json({ error: 'ユーザーが見つかりません' })
+    
+    // パスワードを除外してユーザー情報を返す
+    const safeUser = {
+      id: user.id,
+      username: user.username,
+      email: user.email
+    }
+    res.json(safeUser)
+  } catch (err) {
+    console.error('User fetch error:', err)
+    res.status(500).json({ error: 'サーバーエラー' })
   }
 })
 
