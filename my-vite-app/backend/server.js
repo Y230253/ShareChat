@@ -89,11 +89,32 @@ const JWT_SECRET = 'sharechat_app_secret_key_1234567890';
 
 // 追加: 認証ミドルウェア
 function authenticateToken(req, res, next) {
+  console.log('認証ミドルウェア実行:', req.path)
   const authHeader = req.headers.authorization
-  if (!authHeader) return res.status(401).json({ error: 'トークンがありません' })
+  
+  if (!authHeader) {
+    console.log('Authorization ヘッダーがありません')
+    return res.status(401).json({ error: 'トークンがありません' })
+  }
+  
+  console.log('Authorization ヘッダー:', authHeader.substring(0, 15) + '...')
+  
   const token = authHeader.split(' ')[1]
-  jwt.verify(token, JWT_SECRET, (err, user) => { // process.env.JWT_SECRETをJWT_SECRETに変更
-    if (err) return res.status(403).json({ error: '無効なトークン' })
+  if (!token) {
+    console.log('Bearerトークンが見つかりません')
+    return res.status(401).json({ error: 'トークン形式が不正です' })
+  }
+  
+  console.log('トークン検証開始:', token.substring(0, 10) + '...')
+  console.log('使用する秘密鍵:', JWT_SECRET ? JWT_SECRET.substring(0, 3) + '...' : '未設定')
+  
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      console.error('トークン検証エラー:', err.message)
+      return res.status(403).json({ error: '無効なトークン: ' + err.message })
+    }
+    
+    console.log('トークン検証成功:', user.id)
     req.user = user
     next()
   })
@@ -194,55 +215,132 @@ app.get('/users/:id', authenticateToken, async (req, res) => {
   }
 })
 
-// 🔹 投稿 API（JSON版）
+// 🔹 投稿 API（JSON版）- ユーザー名を追加保存するよう修正
 app.post('/posts', authenticateToken, async (req, res) => {
+  console.log('投稿処理開始:', req.user.id)
+  
   const { image_url, message } = req.body
+  console.log('投稿内容:', { 
+    image_url: image_url ? image_url.substring(0, 20) + '...' : '未設定', 
+    message: message ? message.substring(0, 20) + '...' : '未設定'
+  })
+  
   try {
     const data = await readData()
-    const user_id = req.user.id  // ログインしたユーザーID
+    const userData = await readUserData()
+    
+    // ユーザー情報を取得
+    const user = userData.users.find(u => u.id === req.user.id)
+    if (!user) {
+      return res.status(404).json({ error: 'ユーザーが見つかりません' })
+    }
+    
+    const user_id = req.user.id
     const id = data.posts.length > 0 ? data.posts[data.posts.length - 1].id + 1 : 1
+    
     // 画像パスを相対パスに変換
     let relativeImageUrl = image_url.startsWith('D:/uploads')
       ? image_url.replace('D:/uploads', '/uploads')
       : image_url
+    
     // 絶対URLに変換（バックエンド経由で画像配信）
     if(relativeImageUrl.startsWith('/uploads')) {
       relativeImageUrl = req.protocol + '://' + req.get('host') + relativeImageUrl
     }
+    
+    // 投稿データにユーザー名を追加
     const newPost = { 
       id, 
       user_id, 
+      username: user.username, // ユーザー名を明示的に保存
       image_url: relativeImageUrl, 
       message, 
       created_at: new Date().toISOString(), 
       likeCount: 0,
       bookmarkCount: 0
     }
+    
     data.posts.push(newPost)
     await writeData(data)
     res.json(newPost)
   } catch (err) {
     console.error("投稿処理エラー:", err)
-    res.status(500).json({ error: '投稿エラー' })
+    res.status(500).json({ error: '投稿エラー: ' + err.message })
   }
 })
 
-// 追加: 投稿一覧取得処理で画像パスを変換
+// 修正: 投稿一覧取得処理でユーザー情報も付与
 app.get('/posts', async (req, res) => {
   try {
     const data = await readData();
-    const fixedPosts = data.posts.map(post => {
+    const userData = await readUserData();
+    
+    const fixedPosts = await Promise.all(data.posts.map(async post => {
+      // 画像パス修正
       if (post.image_url.startsWith('D:/uploads')) {
         post.image_url = post.image_url.replace('D:/uploads', '/uploads');
       }
       if(post.image_url.startsWith('/uploads')) {
         post.image_url = req.protocol + '://' + req.get('host') + post.image_url;
       }
+      
+      // 投稿者情報の追加
+      const user = userData.users.find(u => u.id === post.user_id);
+      if (user) {
+        post.username = user.username;
+        // アイコンパスなどがあれば追加
+      }
+      
+      // いいね・ブックマーク数のカウント
+      post.likeCount = data.likes.filter(like => like.post_id === post.id).length;
+      post.bookmarkCount = data.bookmarks.filter(bookmark => bookmark.post_id === post.id).length;
+      
       return post;
-    });
+    }));
+    
     res.json(fixedPosts);
   } catch (err) {
+    console.error('投稿取得エラー:', err);
     res.status(500).json({ error: '投稿取得エラー' });
+  }
+});
+
+// いいね・ブックマークチェックAPIのURLを修正
+// `/likes/check/:post_id` の代わりに `/check-like/:post_id` を使用
+app.get('/check-like/:post_id', authenticateToken, async (req, res) => {
+  try {
+    const data = await readData();
+    const user_id = req.user.id;
+    const post_id = parseInt(req.params.post_id);
+    
+    // このユーザーがこの投稿にいいねしているか確認
+    const liked = data.likes.some(like => 
+      like.user_id === user_id && like.post_id === post_id
+    );
+    
+    res.json({ liked });
+  } catch (err) {
+    console.error('いいねチェックエラー:', err);
+    res.status(500).json({ error: 'いいねチェックに失敗しました' });
+  }
+});
+
+// `/bookmarks/check/:post_id` の代わりに `/check-bookmark/:post_id` を使用
+app.get('/check-bookmark/:post_id', authenticateToken, async (req, res) => {
+  try {
+    const data = await readData();
+    const user_id = req.user.id;
+    const post_id = parseInt(req.params.post_id);
+    
+    // このユーザーがこの投稿をブックマークしているか確認
+    const bookmarked = data.bookmarks.some(bookmark => 
+      bookmark.user_id === user_id && bookmark.post_id === post_id
+    );
+    
+    res.json({ bookmarked });
+  } catch (err) {
+    console.error('ブックマークチェックエラー:', err);
+    res.status(500).json({ error: 'ブックマークチェックに失敗しました' });
   }
 });
 

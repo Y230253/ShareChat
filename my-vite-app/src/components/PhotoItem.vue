@@ -1,22 +1,55 @@
 <script setup>
-import { defineProps, ref } from 'vue'
+import { defineProps, ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import authStore from '../authStore.js'
+
 const props = defineProps({
   photo: Object // 投稿情報
 })
 
-// API のベース URL（必要に応じて環境変数などに置き換えてください）
+const router = useRouter()
+
+// API のベース URL
 const apiUrl = 'http://localhost:3000'
 
-// いいね機能（エラーログ追加）
+// ログイン状態
+const isLoggedIn = ref(false)
+const errorMsg = ref('')
+
+// いいね機能
 const liked = ref(false)
 const likeCount = ref(props.photo.likeCount || 0)
 const toggleLike = async () => {
+  // ログインチェック
+  if (!isLoggedIn.value) {
+    errorMsg.value = 'いいねするにはログインが必要です'
+    setTimeout(() => {
+      errorMsg.value = ''
+      router.push('/login')
+    }, 1500)
+    return
+  }
+
   try {
+    // トークン取得
+    const token = localStorage.getItem('token')
+    if (!token) {
+      errorMsg.value = '認証情報が見つかりません'
+      setTimeout(() => {
+        errorMsg.value = ''
+        router.push('/login')
+      }, 1500)
+      return
+    }
+
     if(liked.value) {
       const response = await fetch(`${apiUrl}/likes`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: 1, post_id: props.photo.id })
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ post_id: props.photo.id })
       })
       if(response.ok) {
         liked.value = false
@@ -27,8 +60,11 @@ const toggleLike = async () => {
     } else {
       const response = await fetch(`${apiUrl}/likes`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: 1, post_id: props.photo.id })
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ post_id: props.photo.id })
       })
       if(response.ok) {
         liked.value = true
@@ -39,19 +75,45 @@ const toggleLike = async () => {
     }
   } catch (err) {
     console.error("いいね処理中エラー", err)
+    errorMsg.value = "処理中にエラーが発生しました"
+    setTimeout(() => errorMsg.value = '', 3000)
   }
 }
 
-// ブックマーク機能（エラーログ追加）
+// ブックマーク機能
 const isBookmarked = ref(false)
 const bookmarkCount = ref(props.photo.bookmarkCount || 0)
 const toggleBookmarkAction = async () => {
+  // ログインチェック
+  if (!isLoggedIn.value) {
+    errorMsg.value = 'ブックマークするにはログインが必要です'
+    setTimeout(() => {
+      errorMsg.value = ''
+      router.push('/login')
+    }, 1500)
+    return
+  }
+  
   try {
+    // トークン取得
+    const token = localStorage.getItem('token')
+    if (!token) {
+      errorMsg.value = '認証情報が見つかりません'
+      setTimeout(() => {
+        errorMsg.value = ''
+        router.push('/login')
+      }, 1500)
+      return
+    }
+    
     if(isBookmarked.value) {
       const response = await fetch(`${apiUrl}/bookmarks`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: 1, post_id: props.photo.id })
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ post_id: props.photo.id })
       })
       if(response.ok) {
         isBookmarked.value = false
@@ -62,8 +124,11 @@ const toggleBookmarkAction = async () => {
     } else {
       const response = await fetch(`${apiUrl}/bookmarks`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: 1, post_id: props.photo.id })
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ post_id: props.photo.id })
       })
       if(response.ok) {
         isBookmarked.value = true
@@ -74,8 +139,43 @@ const toggleBookmarkAction = async () => {
     }
   } catch (err) {
     console.error("ブックマーク処理中エラー", err)
+    errorMsg.value = "処理中にエラーが発生しました"
+    setTimeout(() => errorMsg.value = '', 3000)
   }
 }
+
+// 初期化 - ログイン状態とユーザーの「いいね」「ブックマーク」状態の確認
+onMounted(async () => {
+  // ログイン状態の確認
+  isLoggedIn.value = authStore.isLoggedIn.value
+  
+  if (isLoggedIn.value) {
+    // トークン取得
+    const token = localStorage.getItem('token')
+    
+    try {
+      // この投稿をユーザーがいいね済みかチェック
+      const likesRes = await fetch(`${apiUrl}/likes/check/${props.photo.id}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (likesRes.ok) {
+        const likesData = await likesRes.json()
+        liked.value = likesData.liked
+      }
+      
+      // この投稿をユーザーがブックマーク済みかチェック
+      const bookmarksRes = await fetch(`${apiUrl}/bookmarks/check/${props.photo.id}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (bookmarksRes.ok) {
+        const bookmarksData = await bookmarksRes.json()
+        isBookmarked.value = bookmarksData.bookmarked
+      }
+    } catch (err) {
+      console.error("状態チェックエラー:", err)
+    }
+  }
+})
 </script>
 
 <template>
@@ -83,8 +183,8 @@ const toggleBookmarkAction = async () => {
     <div class="user-info">
       <img :src="photo.userIcon || 'https://via.placeholder.com/40'" class="user-icon" alt="User Icon">
       <div>
-        <p class="username">{{ photo.username || ('ユーザー ' + photo.user_id) }}</p>
-        <p class="date">{{ photo.date || photo.created_at }}</p>
+        <p class="username">{{ authStore.currentUser?.username || photo.username || ('ユーザー ' + photo.user_id) }}</p>
+        <p class="date">{{ new Date(photo.created_at).toLocaleString('ja-JP') }}</p>
       </div>
     </div>
 
@@ -93,13 +193,13 @@ const toggleBookmarkAction = async () => {
 
     <!-- いいね・ブックマークボタン -->
     <div class="actions">
-      <button @click="toggleLike">
-        {{ liked ? 'いいね済' : 'いいね' }} ({{ likeCount }})
+      <p v-if="errorMsg" class="error-message">{{ errorMsg }}</p>
+      <button @click="toggleLike" :class="{ 'active': liked }">
+        {{ liked ? '❤️ いいね済' : '🤍 いいね' }} ({{ likeCount }})
       </button>
-      <button @click="toggleBookmarkAction">
-        {{ isBookmarked ? 'ブックマーク済' : 'ブックマーク' }} ({{ bookmarkCount }})
+      <button @click="toggleBookmarkAction" :class="{ 'active': isBookmarked }">
+        {{ isBookmarked ? '📌 ブックマーク済' : '🔖 ブックマーク' }} ({{ bookmarkCount }})
       </button>
-      <button class="comment-button">コメントする</button>
     </div>
   </div>
 </template>
@@ -143,5 +243,16 @@ const toggleBookmarkAction = async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+button.active {
+  background-color: #e3f2fd;
+  border-color: #2196f3;
+}
+.error-message {
+  color: red;
+  font-size: 0.8rem;
+  text-align: center;
+  width: 100%;
+  margin-bottom: 5px;
 }
 </style>
