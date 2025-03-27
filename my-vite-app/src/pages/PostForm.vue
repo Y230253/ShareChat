@@ -6,20 +6,44 @@
       <div class="post-form">
         <h1>新規投稿</h1>
         <form @submit.prevent="handleSubmit">
-          <div>
-            <label for="photo">写真を選択</label>
-            <input type="file" id="photo" @change="handleFileChange" required>
+          <div class="form-group">
+            <label for="mediaType">メディアタイプ</label>
+            <select id="mediaType" v-model="mediaType">
+              <option value="image">画像</option>
+              <option value="video">動画</option>
+            </select>
           </div>
-          <div>
+          
+          <div class="form-group">
+            <label for="file">{{ mediaType === 'image' ? '写真' : '動画' }}を選択</label>
+            <input 
+              type="file" 
+              id="file" 
+              @change="handleFileChange" 
+              :accept="mediaType === 'image' ? 'image/*' : 'video/*'"
+              required
+            >
+            
+            <!-- プレビュー表示 -->
+            <div v-if="filePreviewUrl" class="preview-container">
+              <img v-if="mediaType === 'image'" :src="filePreviewUrl" alt="プレビュー" class="preview-media">
+              <video v-else :src="filePreviewUrl" controls class="preview-media"></video>
+              <button type="button" @click="clearFileSelection" class="clear-btn">選択解除</button>
+            </div>
+          </div>
+          
+          <div class="form-group">
             <label for="message">コメント</label>
-            <textarea id="message" v-model="message"></textarea>
+            <textarea id="message" v-model="message" rows="4"></textarea>
           </div>
-          <div>
-            <p v-if="errorMsg" class="error">{{ errorMsg }}</p>
+          
+          <div v-if="errorMsg" class="error">
+            {{ errorMsg }}
           </div>
+          
           <div class="buttons">
-            <button type="submit">投稿する</button>
-            <button type="button" @click="handleCancel">キャンセル</button>
+            <button type="submit" class="submit-btn">投稿する</button>
+            <button type="button" @click="handleCancel" class="cancel-btn">キャンセル</button>
           </div>
         </form>
       </div>
@@ -39,6 +63,8 @@ const file = ref(null)
 const message = ref('')
 const errorMsg = ref('')
 const isSidebarOpen = ref(false)
+const mediaType = ref('image') // デフォルトは画像
+const filePreviewUrl = ref('') // プレビュー表示用URL
 
 // ログインチェック
 onMounted(() => {
@@ -55,7 +81,40 @@ const toggleSidebar = () => {
 }
 
 const handleFileChange = (e) => {
-  file.value = e.target.files[0]
+  const selectedFile = e.target.files[0]
+  
+  if (!selectedFile) {
+    clearFileSelection()
+    return
+  }
+  
+  file.value = selectedFile
+  
+  // ファイルタイプをチェック
+  const fileType = selectedFile.type
+  if (mediaType.value === 'image' && !fileType.startsWith('image/')) {
+    errorMsg.value = "画像ファイルを選択してください"
+    clearFileSelection()
+    return
+  }
+  
+  if (mediaType.value === 'video' && !fileType.startsWith('video/')) {
+    errorMsg.value = "動画ファイルを選択してください"
+    clearFileSelection()
+    return
+  }
+  
+  // プレビューURLを作成
+  filePreviewUrl.value = URL.createObjectURL(selectedFile)
+  errorMsg.value = ''
+}
+
+const clearFileSelection = () => {
+  file.value = null
+  if (filePreviewUrl.value) {
+    URL.revokeObjectURL(filePreviewUrl.value)
+    filePreviewUrl.value = ''
+  }
 }
 
 const handleSubmit = async () => {
@@ -81,16 +140,6 @@ const handleSubmit = async () => {
       return
     }
 
-    // JWT形式確認（デバッグ用）
-    const tokenParts = token.split('.')
-    if (tokenParts.length !== 3) {
-      console.error('トークンフォーマットが不正:', token.substring(0, 10) + '...')
-      errorMsg.value = "認証トークンの形式が不正です"
-      return
-    }
-    
-    console.log('トークン確認 (先頭部分):', token.substring(0, 20) + '...')
-
     // ファイルアップロード
     const formData = new FormData()
     formData.append('file', file.value)
@@ -108,14 +157,9 @@ const handleSubmit = async () => {
     
     const uploadData = await uploadRes.json()
     const imageUrl = uploadData.imageUrl
+    const isVideo = mediaType.value === 'video' || uploadData.isVideo
 
     // 投稿処理（認証ヘッダー付き）
-    console.log('投稿リクエスト送信準備:', {
-      image_url: imageUrl,
-      message: message.value ? message.value.substring(0, 20) + '...' : '(空)',
-      Authorization: `Bearer ${token.substring(0, 10)}...`
-    })
-    
     const postRes = await fetch('http://localhost:3000/posts', {
       method: 'POST',
       headers: { 
@@ -124,26 +168,27 @@ const handleSubmit = async () => {
       },
       body: JSON.stringify({
         image_url: imageUrl,
-        message: message.value
+        message: message.value,
+        isVideo: isVideo // 動画フラグを追加
       })
     })
     
     if(!postRes.ok) {
-      console.error('投稿エラー:', postRes.status, postRes.statusText)
       const errorData = await postRes.json().catch(e => ({ error: '応答解析エラー' }))
-      console.error('エラー詳細:', errorData)
       errorMsg.value = errorData.error || `投稿に失敗しました (${postRes.status})`
       
-      // 認証エラーの場合は再ログインを促す
       if (postRes.status === 401 || postRes.status === 403) {
         errorMsg.value = "認証に失敗しました。再ログインしてください。"
         setTimeout(() => {
-          authStore.clearUser() // 認証情報をクリア
+          authStore.clearUser()
           router.push('/login')
         }, 2000)
       }
       return
     }
+    
+    // クリーンアップ
+    clearFileSelection()
     
     const postData = await postRes.json()
     console.log('投稿成功:', postData)
@@ -156,6 +201,7 @@ const handleSubmit = async () => {
 }
 
 const handleCancel = () => {
+  clearFileSelection()
   router.push('/')
 }
 </script>
@@ -164,22 +210,83 @@ const handleCancel = () => {
 .post-form {
   max-width: 600px;
   margin: 2rem auto;
-  padding: 1rem;
+  padding: 2rem;
   border: 1px solid #ccc;
   border-radius: 8px;
+  background-color: #fff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 .post-form h1 {
   text-align: center;
+  margin-bottom: 1.5rem;
+  color: #2e7d32;
 }
-.post-form form > div {
-  margin-bottom: 1rem;
+.form-group {
+  margin-bottom: 1.5rem;
+}
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: bold;
+  color: #2e7d32;
+}
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #a5d6a7;
+  border-radius: 4px;
+  font-size: 1rem;
+}
+.preview-container {
+  margin-top: 1rem;
+  position: relative;
+  max-width: 100%;
+  text-align: center;
+}
+.preview-media {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 4px;
+}
+.clear-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background-color: rgba(255, 255, 255, 0.8);
+  border: none;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
 }
 .buttons {
   display: flex;
   justify-content: space-between;
+  margin-top: 1rem;
+}
+.submit-btn {
+  background-color: #2e7d32;
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.cancel-btn {
+  background-color: #f5f5f5;
+  color: #333;
+  padding: 0.75rem 1.5rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
 }
 .error {
-  color: red;
+  color: #e53935;
   margin-bottom: 1rem;
+  text-align: center;
 }
 </style>

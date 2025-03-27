@@ -183,12 +183,33 @@ onMounted(async () => {
     <div class="user-info">
       <img :src="photo.userIcon || 'https://via.placeholder.com/40'" class="user-icon" alt="User Icon">
       <div>
-        <p class="username">{{ authStore.currentUser?.username || photo.username || ('ユーザー ' + photo.user_id) }}</p>
+        <p class="username">{{ photo.username || ('ユーザー ' + photo.user_id) }}</p>
         <p class="date">{{ new Date(photo.created_at).toLocaleString('ja-JP') }}</p>
       </div>
     </div>
 
-    <img :src="photo.imageUrl || photo.image_url" class="photo" alt="Uploaded Photo">
+    <!-- 画像または動画を条件に応じて表示 -->
+    <div class="media-container">
+      <!-- 動画の場合 - 自動再生、ループ、音声オフ、プレイヤーコントロール付き -->
+      <video 
+        v-if="photo.isVideo" 
+        :src="photo.image_url" 
+        class="media" 
+        autoplay
+        loop
+        muted
+        playsinline
+        controls
+      ></video>
+      <!-- 画像の場合 -->
+      <img 
+        v-else 
+        :src="photo.image_url" 
+        class="media" 
+        alt="Uploaded Photo"
+      >
+    </div>
+
     <p class="message">{{ photo.message }}</p>
 
     <!-- いいね・ブックマークボタン -->
@@ -214,6 +235,27 @@ onMounted(async () => {
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
   margin-bottom: 20px;
 }
+
+.media-container {
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 10px;
+  position: relative;
+  padding-top: 56.25%; /* 16:9のアスペクト比 */
+}
+
+.media {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+/* 以下は既存のスタイル */
 .user-info {
   display: flex;
   align-items: center;
@@ -231,10 +273,6 @@ onMounted(async () => {
 .date {
   color: gray;
   font-size: 12px;
-}
-.photo {
-  width: 100%;
-  border-radius: 10px;
 }
 .message {
   margin: 10px 0;
