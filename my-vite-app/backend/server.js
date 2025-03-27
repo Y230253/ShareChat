@@ -453,4 +453,138 @@ app.delete('/bookmarks', authenticateToken, async (req, res) => {
   }
 })
 
-app.listen(3000, () => console.log('Server running on port 3000'));
+// コメント関連のAPI
+// コメント取得API
+app.get('/comments/:post_id', async (req, res) => {
+  console.log(`コメント取得リクエスト: post_id=${req.params.post_id}`);
+  try {
+    const data = await readData();
+    const post_id = parseInt(req.params.post_id);
+    
+    // 指定された投稿IDに関するコメントを取得
+    let comments = data.comments.filter(comment => comment.post_id === post_id);
+    console.log(`該当コメント数: ${comments.length}`);
+    
+    // 各コメントにユーザー情報を付与
+    const userData = await readUserData();
+    comments = comments.map(comment => {
+      const user = userData.users.find(u => u.id === comment.user_id);
+      if (user) {
+        return {
+          ...comment,
+          username: user.username,
+          user_icon: user.icon_url || null
+        };
+      }
+      return comment;
+    });
+    
+    res.json(comments);
+  } catch (err) {
+    console.error('コメント取得エラー:', err);
+    res.status(500).json({ error: 'コメント取得に失敗しました' });
+  }
+});
+
+// コメント投稿API
+app.post('/comments', authenticateToken, async (req, res) => {
+  console.log('コメント投稿リクエスト受信:', req.body);
+  const { post_id, text } = req.body;
+  
+  if (!post_id || !text || !text.trim()) {
+    console.log('バリデーションエラー:', { post_id, text });
+    return res.status(400).json({ error: '投稿IDとコメント内容が必要です' });
+  }
+  
+  try {
+    const data = await readData();
+    const userData = await readUserData();
+    
+    // ユーザー情報を取得
+    const user = userData.users.find(u => u.id === req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'ユーザーが見つかりません' });
+    }
+    
+    // コメントを作成
+    const id = data.comments.length > 0 
+      ? Math.max(...data.comments.map(c => c.id || 0)) + 1 
+      : 1;
+      
+    const newComment = {
+      id,
+      post_id: parseInt(post_id),
+      user_id: req.user.id,
+      text: text.trim(),
+      created_at: new Date().toISOString()
+    };
+    
+    // データ構造を確認
+    if (!Array.isArray(data.comments)) {
+      console.log('comments配列が存在しないため初期化します');
+      data.comments = [];
+    }
+    
+    data.comments.push(newComment);
+    await writeData(data);
+    console.log('コメント保存成功:', newComment);
+    
+    // レスポンス用にユーザー情報を付与
+    const commentWithUser = {
+      ...newComment,
+      username: user.username,
+      user_icon: user.icon_url || null
+    };
+    
+    res.status(201).json(commentWithUser);
+  } catch (err) {
+    console.error('コメント投稿エラー:', err);
+    res.status(500).json({ error: 'コメント投稿に失敗しました: ' + err.message });
+  }
+});
+
+// コメント削除API（オプション）
+app.delete('/comments/:id', authenticateToken, async (req, res) => {
+  const commentId = parseInt(req.params.id);
+  
+  try {
+    const data = await readData();
+    const commentIndex = data.comments.findIndex(c => c.id === commentId);
+    
+    if (commentIndex === -1) {
+      return res.status(404).json({ error: 'コメントが見つかりません' });
+    }
+    
+    // 自分のコメントかチェック
+    if (data.comments[commentIndex].user_id !== req.user.id) {
+      return res.status(403).json({ error: '他のユーザーのコメントは削除できません' });
+    }
+    
+    // コメント削除
+    data.comments.splice(commentIndex, 1);
+    await writeData(data);
+    
+    res.json({ success: true });
+  } catch (err) {
+    console.error('コメント削除エラー:', err);
+    res.status(500).json({ error: 'コメント削除に失敗しました' });
+  }
+});
+
+// サーバー起動時にデータ構造を確認
+app.listen(3000, async () => {
+  console.log('Server running on port 3000');
+  
+  // 起動時にデータファイルのコメント配列が存在するか確認
+  try {
+    const data = await readData();
+    if (!data.comments) {
+      console.log('コメント配列が存在しないため初期化します');
+      data.comments = [];
+      await writeData(data);
+    }
+    console.log(`データ構造確認: ${Object.keys(data).join(', ')}`);
+  } catch (err) {
+    console.error('データ構造確認エラー:', err);
+  }
+});

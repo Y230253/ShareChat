@@ -94,5 +94,20 @@
     }
   ],
   "bookmarks": [],
-  "comments": []
+  "comments": [
+    {
+      "id": 1,
+      "post_id": 7,
+      "user_id": 1,
+      "text": "さｄｆ",
+      "created_at": "2025-03-27T13:47:44.430Z"
+    },
+    {
+      "id": 2,
+      "post_id": 7,
+      "user_id": 1,
+      "text": "いいね",
+      "created_at": "2025-03-27T13:47:50.931Z"
+    }
+  ]
 }

@@ -274,14 +274,14 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- 画像または動画を条件に応じて表示 -->
+    <!-- 画像または動画を条件に応じて表示 - コンテナ構造を修正 -->
     <div class="media-container" :class="{ 'loading': !isMediaLoaded }">
       <!-- ローディング表示 -->
       <div v-if="!isMediaLoaded" class="loading-indicator">
         <div class="spinner"></div>
       </div>
 
-      <!-- 動画の場合 - 画面内表示時のみ自動再生 -->
+      <!-- 動画の場合 -->
       <video 
         v-if="photo.isVideo" 
         ref="mediaRef"
@@ -297,7 +297,7 @@ onUnmounted(() => {
         @click.stop
       ></video>
       
-      <!-- 画像の場合 - object-fitをcontainに変更 -->
+      <!-- 画像の場合 -->
       <img 
         v-else 
         ref="mediaRef"
@@ -337,6 +337,7 @@ onUnmounted(() => {
   cursor: pointer; /* カードをクリック可能に見せる */
 }
 
+/* メディアコンテナのスタイル修正 - 白くボケるのを修正 */
 .media-container {
   width: 100%;
   border-radius: 10px;
@@ -347,8 +348,27 @@ onUnmounted(() => {
   background-color: #f0f0f0; /* プレースホルダー背景 */
 }
 
+.media {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain; /* coverからcontainに変更して画像の歪みを防止 */
+  border-radius: 10px;
+  transition: opacity 0.3s ease;
+}
+
+.media:not(.visible) {
+  opacity: 0.7; /* 画面外の動画は少し透明に */
+}
+
+.media:not(.visible) {
+  opacity: 0.7; /* 画面外の動画は少し透明に */
+}
+
 .media-container.loading {
-  background-color: #f0f0f0;
+  min-height: 200px;
 }
 
 .loading-indicator {
@@ -378,22 +398,6 @@ onUnmounted(() => {
   100% { transform: rotate(360deg); }
 }
 
-.media {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: contain; /* coverからcontainに変更して画像の歪みを防止 */
-  border-radius: 10px;
-  transition: opacity 0.3s ease;
-}
-
-.media:not(.visible) {
-  opacity: 0.7; /* 画面外の動画は少し透明に */
-}
-
-/* 以下は既存のスタイル */
 .user-info {
   display: flex;
   align-items: center;

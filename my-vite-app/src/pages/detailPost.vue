@@ -215,12 +215,19 @@ const fetchPostDetail = async () => {
   }
 };
 
-// コメント取得
+// コメント取得 - エラーハンドリングを強化
 const fetchComments = async () => {
   try {
-    // APIが実装されている場合はここでコメント取得
-    // TODO: 実際のコメント取得APIに置き換える
-    comments.value = []; // ダミーデータ
+    console.log(`コメント取得中: post_id=${postId.value}`);
+    const res = await fetch(`${apiUrl}/comments/${postId.value}`);
+    
+    if (!res.ok) {
+      console.error('コメント取得失敗:', await res.text());
+      return;
+    }
+    
+    comments.value = await res.json();
+    console.log('コメント取得成功:', comments.value);
     commentCount.value = comments.value.length;
   } catch (err) {
     console.error('コメント取得エラー:', err);
@@ -359,7 +366,7 @@ const focusCommentInput = () => {
   });
 };
 
-// コメント送信
+// コメント送信 - エラーハンドリングを強化
 const submitComment = async () => {
   if (!isLoggedIn.value || !newComment.value.trim()) return;
   
@@ -367,24 +374,44 @@ const submitComment = async () => {
   if (!token) return;
   
   try {
-    // TODO: 実際のコメント投稿APIに置き換える
-    // ダミー実装
-    const comment = {
-      id: Date.now(),
+    console.log('コメント送信:', {
       post_id: postId.value,
-      user_id: authStore.user.value?.id,
-      username: authStore.user.value?.username,
-      user_icon: authStore.user.value?.icon_url,
-      text: newComment.value,
-      created_at: new Date().toISOString()
-    };
+      text: newComment.value
+    });
     
-    comments.value.unshift(comment);
+    // 実際のAPIを使用してコメントを送信
+    const response = await fetch(`${apiUrl}/comments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        post_id: postId.value,
+        text: newComment.value
+      })
+    });
+    
+    // レスポンスのデバッグ
+    console.log('コメント送信レスポンス:', response.status);
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: '不明なエラー' }));
+      console.error('コメントAPI応答エラー:', errorData);
+      throw new Error(errorData.error || 'コメントの投稿に失敗しました');
+    }
+    
+    const newCommentData = await response.json();
+    console.log('新規コメントデータ:', newCommentData);
+    
+    // 新しいコメントを先頭に追加
+    comments.value.unshift(newCommentData);
     commentCount.value++;
     newComment.value = '';
     
   } catch (err) {
     console.error('コメント投稿エラー:', err);
+    alert('コメントの投稿に失敗しました: ' + err.message);
   }
 };
 
