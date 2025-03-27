@@ -1,22 +1,41 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Home from '../src/pages/Home.vue'
-import Favorite from '../src/pages/Favorite.vue'
-import PostForm from '../src/pages/PostForm.vue' // PostForm.vue がこのパスに存在するか確認
-import Login from '../src/pages/Login.vue' // Login.vue がこのパスに存在するか確認
-import UserRegister from '../src/pages/UserRegister.vue' // Register.vue がこのパスに存在するか確認
+import Login from '../src/pages/Login.vue'
+import UserRegister from '../src/pages/UserRegister.vue'
+import PostForm from '../src/pages/PostForm.vue'
+import DetailPost from '../src/pages/detailPost.vue'
 
 const routes = [
-  { path: '/', component: Home, meta: { layout: 'default', showPhotoList: true } },
-  { path: '/favorite', component: Favorite, meta: { layout: 'favorite', showPhotoList: true } },
-  { path: '/posts', component: PostForm, meta: { layout: 'default', showPhotoList: false } },
-  { path: '/register', component: UserRegister, meta: { layout: 'default', showPhotoList: true } },
-  { path: '/login', component: Login, meta: { layout: 'default', showPhotoList: true } },
+  {
+    path: '/',
+    component: Home,
+    meta: {
+      showPhotoList: true
+    }
+  },
+  {
+    path: '/login',
+    component: Login
+  },
+  {
+    path: '/register',
+    component: UserRegister
+  },
+  {
+    path: '/posts',
+    component: PostForm
+  },
+  // 詳細ページのルート追加
+  {
+    path: '/detail/:id',
+    component: DetailPost,
+    props: true
+  }
 ]
 
 const router = createRouter({
   history: createWebHistory(),
-  routes,
+  routes
 })
 
 export default router
-//ページ遷移関係はここに記述しないと反映されない

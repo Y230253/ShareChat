@@ -55,6 +55,27 @@ const loadPosts = async () => {
   }
 };
 
+// 投稿をバッチで表示する（初期表示の最適化）
+const visiblePostCount = ref(10); // 初期表示数
+const batchSize = ref(5); // 追加で表示する数
+
+// 表示する投稿を計算
+const visiblePosts = computed(() => {
+  return photos.value.slice(0, visiblePostCount.value);
+});
+
+// スクロールイベントハンドラ
+const handleScroll = () => {
+  // ページ下部に近づいたらもっと読み込む
+  const scrollHeight = document.documentElement.scrollHeight;
+  const scrollTop = document.documentElement.scrollTop || document.body.scrollTop;
+  const clientHeight = document.documentElement.clientHeight;
+  
+  if (scrollTop + clientHeight >= scrollHeight - 300 && visiblePostCount.value < photos.value.length) {
+    visiblePostCount.value += batchSize.value;
+  }
+};
+
 onMounted(() => {
   window.addEventListener('resize', updateColumns);
   updateColumns();
@@ -69,10 +90,14 @@ onMounted(() => {
       loadPosts();
     }
   });
+
+  // スクロールイベントリスナー追加
+  window.addEventListener('scroll', handleScroll);
 });
 
 onUnmounted(() => {
   window.removeEventListener('resize', updateColumns);
+  window.removeEventListener('scroll', handleScroll);
 });
 
 watch(() => props.sidebarOpen, () => {
@@ -94,10 +119,15 @@ watch(() => props.sidebarOpen, () => {
     </div>
     
     <ul v-else :style="{ display: 'grid', gap: '1rem', gridTemplateColumns: `repeat(${columns}, 1fr)` }">
-      <li v-for="photo in photos" :key="photo.id">
+      <li v-for="photo in visiblePosts" :key="photo.id">
         <photoItem :photo="photo" />
       </li>
     </ul>
+    
+    <!-- もっと読み込むボタン（オプション） -->
+    <div v-if="visiblePostCount < photos.length" class="load-more">
+      <button @click="visiblePostCount += batchSize">もっと見る</button>
+    </div>
   </div>
 </template>
 
@@ -116,5 +146,19 @@ img {
 }
 .error {
   color: red;
+}
+
+.load-more {
+  text-align: center;
+  margin-top: 20px;
+}
+
+.load-more button {
+  background-color: #42b983;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
 }
 </style>
