@@ -46,7 +46,11 @@ const routes = [
   },
   {
     path: '/tags',
-    component: Tags
+    component: Tags,
+    meta: {
+      showPhotoList: true,
+      requiresAuth: true // 認証が必要なルートに設定
+    }
   }
 ]
 
