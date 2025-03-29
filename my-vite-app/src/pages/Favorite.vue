@@ -7,6 +7,24 @@
         <div class="favorite-container">
           <h1>お気に入り 📌</h1>
           
+          <!-- タグフィルター（ログイン中のみ表示） -->
+          <div v-if="isLoggedIn" class="tag-filter">
+            <input
+              type="text"
+              v-model="tagFilter"
+              placeholder="タグでフィルタ"
+              class="tag-input"
+              @keydown.enter="applyTagFilter"
+            />
+            <button @click="applyTagFilter" class="filter-btn">フィルタ</button>
+            <button v-if="currentTagFilter" @click="clearTagFilter" class="clear-btn">クリア</button>
+          </div>
+          
+          <!-- 現在のフィルター表示 -->
+          <div v-if="currentTagFilter" class="current-filter">
+            <p>フィルター: <span class="filter-tag">#{{ currentTagFilter }}</span></p>
+          </div>
+          
           <!-- 未ログイン時の表示 -->
           <div v-if="!isLoggedIn" class="login-prompt">
             <p>お気に入り投稿を表示するには<router-link to="/login">ログイン</router-link>してください</p>
@@ -26,8 +44,11 @@
           
           <!-- ブックマークなしの表示 -->
           <div v-else-if="bookmarkedPosts.length === 0" class="empty-state">
-            <p>ブックマークした投稿はありません</p>
-            <router-link to="/" class="browse-btn">投稿を見る</router-link>
+            <p>{{ currentTagFilter ? `「${currentTagFilter}」のタグがついたブックマーク投稿はありません` : 'ブックマークした投稿はありません' }}</p>
+            <div class="action-buttons">
+              <router-link to="/" class="browse-btn">投稿を見る</router-link>
+              <button v-if="currentTagFilter" @click="clearTagFilter" class="clear-filter-btn">フィルターをクリア</button>
+            </div>
           </div>
           
           <!-- ブックマーク投稿一覧 -->
@@ -56,6 +77,8 @@ const isSidebarOpen = ref(false)
 const loading = ref(false)
 const error = ref(null)
 const bookmarkedPosts = ref([])
+const tagFilter = ref('')
+const currentTagFilter = ref('')
 
 // ログイン状態を監視
 const isLoggedIn = computed(() => authStore.isLoggedIn.value)
@@ -81,6 +104,22 @@ const toggleSidebar = () => {
   updateColumns()
 }
 
+// タグフィルター適用
+const applyTagFilter = () => {
+  const tag = tagFilter.value.trim()
+  if (tag) {
+    currentTagFilter.value = tag
+    fetchBookmarkedPosts()
+  }
+}
+
+// タグフィルタークリア
+const clearTagFilter = () => {
+  currentTagFilter.value = ''
+  tagFilter.value = ''
+  fetchBookmarkedPosts()
+}
+
 // ブックマーク投稿を取得する関数
 const fetchBookmarkedPosts = async () => {
   if (!isLoggedIn.value) return
@@ -96,8 +135,14 @@ const fetchBookmarkedPosts = async () => {
       return
     }
     
+    // クエリパラメータの構築
+    let url = 'http://localhost:3000/bookmarked-posts'
+    if (currentTagFilter.value) {
+      url += `?tag=${encodeURIComponent(currentTagFilter.value)}`
+    }
+    
     // ブックマークした投稿一覧をAPIから取得
-    const res = await fetch('http://localhost:3000/bookmarked-posts', {
+    const res = await fetch(url, {
       headers: {
         'Authorization': `Bearer ${token}`
       }
@@ -248,5 +293,68 @@ li {
   color: #42b983;
   text-decoration: underline;
   font-weight: bold;
+}
+
+/* タグフィルター */
+.tag-filter {
+  display: flex;
+  max-width: 500px;
+  margin: 0 auto 20px;
+}
+
+.tag-input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #a5d6a7;
+  border-radius: 4px 0 0 4px;
+  font-size: 1rem;
+}
+
+.filter-btn {
+  background-color: #2e7d32;
+  color: white;
+  border: none;
+  padding: 0 15px;
+  border-radius: 0 4px 4px 0;
+  cursor: pointer;
+}
+
+.clear-btn {
+  background-color: #f5f5f5;
+  color: #333;
+  border: 1px solid #ddd;
+  padding: 0 15px;
+  border-radius: 4px;
+  margin-left: 8px;
+  cursor: pointer;
+}
+
+.current-filter {
+  text-align: center;
+  margin-bottom: 20px;
+  font-size: 0.9rem;
+}
+
+.filter-tag {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-weight: bold;
+}
+
+.action-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.clear-filter-btn {
+  background-color: #f5f5f5;
+  color: #333;
+  border: 1px solid #ddd;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
 }
 </style>

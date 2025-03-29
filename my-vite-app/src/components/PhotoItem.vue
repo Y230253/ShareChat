@@ -312,6 +312,11 @@ onUnmounted(() => {
 
     <p class="message">{{ photo.message }}</p>
 
+    <!-- タグ表示 -->
+    <div class="tags">
+      <span v-for="tag in photo.tags" :key="tag" class="tag">{{ tag }}</span>
+    </div>
+
     <!-- いいね・ブックマークボタン -->
     <div class="actions">
       <p v-if="errorMsg" class="error-message">{{ errorMsg }}</p>
@@ -428,6 +433,30 @@ onUnmounted(() => {
 .message {
   margin: 10px 0;
 }
+
+/* タグ表示のスタイル */
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 10px;
+}
+
+.tag {
+  font-size: 0.8rem;
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  padding: 2px 8px;
+  border-radius: 12px;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.tag:hover {
+  background-color: #c8e6c9;
+  text-decoration: underline;
+}
+
 .actions {
   display: flex;
   align-items: center;

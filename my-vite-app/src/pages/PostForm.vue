@@ -37,6 +37,50 @@
             <textarea id="message" v-model="message" rows="4"></textarea>
           </div>
           
+          <!-- タグ選択エリア -->
+          <div class="form-group">
+            <label>タグ選択</label>
+            <div class="tag-selection-area">
+              <!-- 選択済みタグ -->
+              <div class="selected-tags">
+                <span v-for="tag in selectedTags" :key="tag" class="tag">
+                  {{ tag }}
+                  <button type="button" @click="removeTag(tag)" class="remove-tag">×</button>
+                </span>
+              </div>
+              
+              <!-- タグ入力フォーム -->
+              <div class="tag-input-area">
+                <input
+                  type="text"
+                  v-model="tagInput"
+                  @keydown.enter.prevent="addTag"
+                  @keydown.tab.prevent="addTag"
+                  placeholder="新しいタグ（Enterで追加）"
+                  class="tag-input"
+                />
+                <button type="button" @click="addTag" class="add-tag-btn">追加</button>
+              </div>
+              
+              <!-- 人気タグ表示 -->
+              <div class="popular-tags">
+                <p>人気のタグ:</p>
+                <div class="tag-cloud">
+                  <button
+                    type="button"
+                    v-for="tag in popularTags"
+                    :key="tag.id"
+                    @click="selectExistingTag(tag.name)"
+                    class="tag-btn"
+                    :class="{ selected: selectedTags.includes(tag.name) }"
+                  >
+                    {{ tag.name }} ({{ tag.count || 0 }})
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          
           <div v-if="errorMsg" class="error">
             {{ errorMsg }}
           </div>
@@ -66,6 +110,11 @@ const isSidebarOpen = ref(false)
 const mediaType = ref('image') // デフォルトは画像
 const filePreviewUrl = ref('') // プレビュー表示用URL
 
+// タグ関連
+const tagInput = ref('')
+const selectedTags = ref([])
+const popularTags = ref([])
+
 // ログインチェック
 onMounted(() => {
   if (!authStore.isLoggedIn.value) {
@@ -74,7 +123,26 @@ onMounted(() => {
       router.push('/login')
     }, 2000)
   }
+  
+  // 人気のタグを取得
+  fetchPopularTags()
 })
+
+// 人気のタグを取得する関数
+const fetchPopularTags = async () => {
+  try {
+    const res = await fetch('http://localhost:3000/tags')
+    if (!res.ok) {
+      console.error('タグ取得エラー:', await res.text())
+      return
+    }
+    
+    const tags = await res.json()
+    popularTags.value = tags.slice(0, 10) // 上位10件のみ表示
+  } catch (err) {
+    console.error('タグ取得エラー:', err)
+  }
+}
 
 const toggleSidebar = () => {
   isSidebarOpen.value = !isSidebarOpen.value
@@ -114,6 +182,35 @@ const clearFileSelection = () => {
   if (filePreviewUrl.value) {
     URL.revokeObjectURL(filePreviewUrl.value)
     filePreviewUrl.value = ''
+  }
+}
+
+// タグを追加する関数
+const addTag = () => {
+  const tag = tagInput.value.trim()
+  if (tag && !selectedTags.value.includes(tag) && selectedTags.value.length < 5) {
+    selectedTags.value.push(tag)
+    tagInput.value = ''
+  } else if (selectedTags.value.length >= 5) {
+    errorMsg.value = "タグは最大5つまで設定できます"
+    setTimeout(() => errorMsg.value = '', 3000)
+  }
+}
+
+// タグを削除する関数
+const removeTag = (tag) => {
+  selectedTags.value = selectedTags.value.filter(t => t !== tag)
+}
+
+// 既存のタグを選択/解除する関数
+const selectExistingTag = (tagName) => {
+  if (selectedTags.value.includes(tagName)) {
+    removeTag(tagName)
+  } else if (selectedTags.value.length < 5) {
+    selectedTags.value.push(tagName)
+  } else {
+    errorMsg.value = "タグは最大5つまで設定できます"
+    setTimeout(() => errorMsg.value = '', 3000)
   }
 }
 
@@ -169,7 +266,8 @@ const handleSubmit = async () => {
       body: JSON.stringify({
         image_url: imageUrl,
         message: message.value,
-        isVideo: isVideo // 動画フラグを追加
+        isVideo: isVideo,
+        tags: selectedTags.value // タグ情報を送信
       })
     })
     
@@ -213,9 +311,8 @@ const handleCancel = () => {
   padding: 2rem;
   border: 1px solid #ccc;
   border-radius: 8px;
-  background-color: #a7a7a7;
+  background-color: #fff;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  height:900px;
 }
 .post-form h1 {
   text-align: center;
@@ -232,7 +329,8 @@ const handleCancel = () => {
   color: #2e7d32;
 }
 .form-group select,
-.form-group textarea {
+.form-group textarea,
+.form-group input[type="text"] {
   width: 100%;
   padding: 0.75rem;
   border: 1px solid #a5d6a7;
@@ -289,5 +387,100 @@ const handleCancel = () => {
   color: #e53935;
   margin-bottom: 1rem;
   text-align: center;
+}
+
+/* タグ関連のスタイル */
+.tag-selection-area {
+  margin-top: 0.5rem;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 1rem;
+  background-color: #f9f9f9;
+}
+
+.selected-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  padding: 0.25rem 0.5rem;
+  border-radius: 16px;
+  font-size: 0.875rem;
+}
+
+.remove-tag {
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  margin-left: 4px;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.tag-input-area {
+  display: flex;
+  margin-bottom: 1rem;
+}
+
+.tag-input {
+  flex: 1;
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 4px 0 0 4px;
+}
+
+.add-tag-btn {
+  background-color: #2e7d32;
+  color: white;
+  border: none;
+  border-radius: 0 4px 4px 0;
+  padding: 0 1rem;
+  cursor: pointer;
+}
+
+.popular-tags {
+  margin-top: 1rem;
+}
+
+.popular-tags p {
+  font-size: 0.875rem;
+  color: #666;
+  margin-bottom: 0.5rem;
+}
+
+.tag-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.tag-btn {
+  background-color: #f1f8e9;
+  border: 1px solid #c5e1a5;
+  color: #558b2f;
+  border-radius: 16px;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tag-btn:hover {
+  background-color: #dcedc8;
+}
+
+.tag-btn.selected {
+  background-color: #aed581;
+  color: #33691e;
+  border-color: #8bc34a;
 }
 </style>

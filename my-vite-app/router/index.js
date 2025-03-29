@@ -4,6 +4,7 @@ import Login from '../src/pages/Login.vue'
 import UserRegister from '../src/pages/UserRegister.vue'
 import PostForm from '../src/pages/PostForm.vue'
 import DetailPost from '../src/pages/detailPost.vue'
+import Tags from '../src/pages/Tags.vue'
 import authStore from '../src/authStore.js'
 
 const routes = [
@@ -42,6 +43,10 @@ const routes = [
       showPhotoList: true,
       requiresAuth: true // 認証が必要なルートに設定
     }
+  },
+  {
+    path: '/tags',
+    component: Tags
   }
 ]
 

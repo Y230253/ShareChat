@@ -102,7 +102,7 @@ async function readData() {
   } catch (error) {
     if (error.code === 'ENOENT') {
       // ファイルが存在しない場合、初期構造で作成
-      const defaultData = { users: [], posts: [], likes: [], bookmarks: [], comments: [] };
+      const defaultData = { users: [], posts: [], likes: [], bookmarks: [], comments: [], tags: [] };
       await writeData(defaultData);
       return defaultData;
     }
@@ -259,11 +259,12 @@ app.get('/users/:id', authenticateToken, async (req, res) => {
 app.post('/posts', authenticateToken, async (req, res) => {
   console.log('投稿処理開始:', req.user.id)
   
-  const { image_url, message, isVideo } = req.body
+  const { image_url, message, isVideo, tags } = req.body
   console.log('投稿内容:', { 
     image_url: image_url ? image_url.substring(0, 20) + '...' : '未設定', 
     message: message ? message.substring(0, 20) + '...' : '未設定',
-    isVideo: isVideo || false
+    isVideo: isVideo || false,
+    tags: tags || []
   })
   
   try {
@@ -293,17 +294,46 @@ app.post('/posts', authenticateToken, async (req, res) => {
     const newPost = { 
       id, 
       user_id, 
-      username: user.username, // ユーザー名を明示的に保存
-      user_icon: user.icon_url || null, // ユーザーアイコンURLを追加
+      username: user.username, 
+      user_icon: user.icon_url || null, 
       image_url: relativeImageUrl, 
       message,
-      isVideo: isVideo || false, // 動画かどうかのフラグ
+      isVideo: isVideo || false, 
       created_at: new Date().toISOString(), 
       likeCount: 0,
-      bookmarkCount: 0
+      bookmarkCount: 0,
+      tags: tags || [] // タグ情報を保存
     }
     
     data.posts.push(newPost)
+
+    // 新しいタグがあれば追加
+    if (tags && tags.length) {
+      // tags配列が無ければ初期化
+      if (!Array.isArray(data.tags)) {
+        data.tags = [];
+      }
+
+      // 存在しないタグを追加
+      tags.forEach(tagName => {
+        const normalizedTag = tagName.toLowerCase().trim();
+        if (normalizedTag && !data.tags.some(t => t.name.toLowerCase() === normalizedTag)) {
+          const tagId = data.tags.length > 0 ? Math.max(...data.tags.map(t => t.id)) + 1 : 1;
+          data.tags.push({
+            id: tagId,
+            name: tagName.trim(),
+            count: 1
+          });
+        } else if (normalizedTag) {
+          // 既存のタグのカウントを増やす
+          const existingTag = data.tags.find(t => t.name.toLowerCase() === normalizedTag);
+          if (existingTag) {
+            existingTag.count = (existingTag.count || 0) + 1;
+          }
+        }
+      });
+    }
+    
     await writeData(data)
     res.json(newPost)
   } catch (err) {
@@ -317,8 +347,20 @@ app.get('/posts', async (req, res) => {
   try {
     const data = await readData();
     const userData = await readUserData();
+    const tagQuery = req.query.tag; // タグフィルタリング用クエリパラメータ
     
-    const fixedPosts = await Promise.all(data.posts.map(async post => {
+    let posts = data.posts;
+
+    // タグでフィルタリング（指定があれば）
+    if (tagQuery) {
+      const normalizedTagQuery = tagQuery.toLowerCase();
+      posts = posts.filter(post => 
+        post.tags && 
+        post.tags.some(tag => tag.toLowerCase() === normalizedTagQuery)
+      );
+    }
+    
+    const fixedPosts = await Promise.all(posts.map(async post => {
       // 画像パス修正
       if (post.image_url.startsWith('D:/uploads')) {
         post.image_url = post.image_url.replace('D:/uploads', '/uploads');
@@ -331,12 +373,17 @@ app.get('/posts', async (req, res) => {
       const user = userData.users.find(u => u.id === post.user_id);
       if (user) {
         post.username = user.username;
-        post.user_icon = user.icon_url || null; // アイコンURLも追加
+        post.user_icon = user.icon_url || null;
       }
       
       // いいね・ブックマーク数のカウント
       post.likeCount = data.likes.filter(like => like.post_id === post.id).length;
       post.bookmarkCount = data.bookmarks.filter(bookmark => bookmark.post_id === post.id).length;
+
+      // タグが未設定の場合は空配列を設定
+      if (!post.tags) {
+        post.tags = [];
+      }
       
       return post;
     }));
@@ -345,6 +392,27 @@ app.get('/posts', async (req, res) => {
   } catch (err) {
     console.error('投稿取得エラー:', err);
     res.status(500).json({ error: '投稿取得エラー' });
+  }
+});
+
+// タグ一覧取得API（新規追加）
+app.get('/tags', async (req, res) => {
+  try {
+    const data = await readData();
+
+    // tags配列がなければ初期化
+    if (!Array.isArray(data.tags)) {
+      data.tags = [];
+      await writeData(data);
+    }
+
+    // タグを使用頻度順にソート
+    const sortedTags = [...data.tags].sort((a, b) => (b.count || 0) - (a.count || 0));
+    
+    res.json(sortedTags);
+  } catch (err) {
+    console.error('タグ取得エラー:', err);
+    res.status(500).json({ error: 'タグの取得に失敗しました' });
   }
 });
 
@@ -571,12 +639,13 @@ app.delete('/comments/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// ブックマークした投稿一覧取得API（新規追加）
+// ブックマークした投稿一覧取得API
 app.get('/bookmarked-posts', authenticateToken, async (req, res) => {
   try {
     const data = await readData();
     const userData = await readUserData();
     const user_id = req.user.id;
+    const tagQuery = req.query.tag; // タグフィルタリング用クエリパラメータ
     
     // このユーザーがブックマークした投稿IDの一覧を取得
     const bookmarkedPostIds = data.bookmarks
@@ -589,30 +658,45 @@ app.get('/bookmarked-posts', authenticateToken, async (req, res) => {
     }
     
     // ブックマークした投稿の詳細情報を取得
-    const bookmarkedPosts = data.posts
-      .filter(post => bookmarkedPostIds.includes(post.id))
-      .map(post => {
-        // 画像パス修正
-        if (post.image_url.startsWith('D:/uploads')) {
-          post.image_url = post.image_url.replace('D:/uploads', '/uploads');
-        }
-        if(post.image_url.startsWith('/uploads')) {
-          post.image_url = req.protocol + '://' + req.get('host') + post.image_url;
-        }
-        
-        // 投稿者情報の追加
-        const user = userData.users.find(u => u.id === post.user_id);
-        if (user) {
-          post.username = user.username;
-          post.user_icon = user.icon_url || null;
-        }
-        
-        // いいね・ブックマーク数のカウント
-        post.likeCount = data.likes.filter(like => like.post_id === post.id).length;
-        post.bookmarkCount = data.bookmarks.filter(bookmark => bookmark.post_id === post.id).length;
-        
-        return post;
-      });
+    let bookmarkedPosts = data.posts
+      .filter(post => bookmarkedPostIds.includes(post.id));
+
+    // タグでフィルタリング（指定があれば）
+    if (tagQuery) {
+      const normalizedTagQuery = tagQuery.toLowerCase();
+      bookmarkedPosts = bookmarkedPosts.filter(post => 
+        post.tags && 
+        post.tags.some(tag => tag.toLowerCase() === normalizedTagQuery)
+      );
+    }
+
+    bookmarkedPosts = bookmarkedPosts.map(post => {
+      // 画像パス修正
+      if (post.image_url.startsWith('D:/uploads')) {
+        post.image_url = post.image_url.replace('D:/uploads', '/uploads');
+      }
+      if(post.image_url.startsWith('/uploads')) {
+        post.image_url = req.protocol + '://' + req.get('host') + post.image_url;
+      }
+      
+      // 投稿者情報の追加
+      const user = userData.users.find(u => u.id === post.user_id);
+      if (user) {
+        post.username = user.username;
+        post.user_icon = user.icon_url || null;
+      }
+      
+      // いいね・ブックマーク数のカウント
+      post.likeCount = data.likes.filter(like => like.post_id === post.id).length;
+      post.bookmarkCount = data.bookmarks.filter(bookmark => bookmark.post_id === post.id).length;
+
+      // タグが未設定の場合は空配列を設定
+      if (!post.tags) {
+        post.tags = [];
+      }
+      
+      return post;
+    });
     
     // 新しい投稿順に並べ替え
     bookmarkedPosts.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -628,14 +712,18 @@ app.get('/bookmarked-posts', authenticateToken, async (req, res) => {
 app.listen(3000, async () => {
   console.log('Server running on port 3000');
   
-  // 起動時にデータファイルのコメント配列が存在するか確認
+  // 起動時にデータファイルのコメント配列とタグ配列が存在するか確認
   try {
     const data = await readData();
     if (!data.comments) {
       console.log('コメント配列が存在しないため初期化します');
       data.comments = [];
-      await writeData(data);
     }
+    if (!data.tags) {
+      console.log('タグ配列が存在しないため初期化します');
+      data.tags = [];
+    }
+    await writeData(data);
     console.log(`データ構造確認: ${Object.keys(data).join(', ')}`);
   } catch (err) {
     console.error('データ構造確認エラー:', err);

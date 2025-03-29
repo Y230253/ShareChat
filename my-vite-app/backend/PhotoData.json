@@ -84,6 +84,22 @@
       "created_at": "2025-03-27T13:14:08.316Z",
       "likeCount": 0,
       "bookmarkCount": 0
+    },
+    {
+      "id": 8,
+      "user_id": 1,
+      "username": "ぺのむ",
+      "user_icon": "http://localhost:3000/uploads/1743074430244.png",
+      "image_url": "http://localhost:3000/uploads/1743225558547.png",
+      "message": "てｓｔ",
+      "isVideo": false,
+      "created_at": "2025-03-29T05:19:20.997Z",
+      "likeCount": 0,
+      "bookmarkCount": 0,
+      "tags": [
+        "Blender",
+        "kawaii"
+      ]
     }
   ],
   "likes": [
@@ -119,6 +135,18 @@
       "user_id": 1,
       "text": "いいね",
       "created_at": "2025-03-27T13:47:50.931Z"
+    }
+  ],
+  "tags": [
+    {
+      "id": 1,
+      "name": "Blender",
+      "count": 1
+    },
+    {
+      "id": 2,
+      "name": "kawaii",
+      "count": 1
     }
   ]
 }

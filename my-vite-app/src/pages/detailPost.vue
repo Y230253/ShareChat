@@ -45,6 +45,21 @@
         <!-- メッセージ -->
         <p class="message">{{ post.message }}</p>
         
+        <!-- タグ表示 -->
+        <div v-if="post.tags && post.tags.length > 0" class="tags-container">
+          <h4>タグ</h4>
+          <div class="tags">
+            <router-link 
+              v-for="tag in post.tags" 
+              :key="tag" 
+              :to="`/tags?tag=${encodeURIComponent(tag)}`"
+              class="tag"
+            >
+              #{{ tag }}
+            </router-link>
+          </div>
+        </div>
+        
         <!-- アクションボタン -->
         <div class="action-bar">
           <button @click="toggleLike" :class="{ 'active': liked }">
@@ -537,6 +552,38 @@ onMounted(() => {
   line-height: 1.5;
   margin-bottom: 20px;
   padding: 10px 0;
+}
+
+/* タグ表示のスタイル */
+.tags-container {
+  margin: 15px 0;
+}
+
+.tags-container h4 {
+  margin-bottom: 8px;
+  font-size: 16px;
+  color: #555;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag {
+  font-size: 0.9rem;
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  padding: 4px 12px;
+  border-radius: 16px;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.tag:hover {
+  background-color: #c8e6c9;
+  text-decoration: underline;
 }
 
 .action-bar {
