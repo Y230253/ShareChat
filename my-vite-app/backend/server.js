@@ -36,9 +36,9 @@ async function writeUserData(data) {
   await fs.writeFile(userDataFile, JSON.stringify(data, null, 2));
 }
 
-// CORS設定を更新 - ワイルドカードではなく特定のオリジンを許可し、credentialsを有効にする
+// 開発環境用の簡易CORS設定
 app.use(cors({
-  origin: 'http://localhost:5173', // フロントエンドのURL
+  origin: true, // すべてのオリジンを許可
   credentials: true
 }));
 
