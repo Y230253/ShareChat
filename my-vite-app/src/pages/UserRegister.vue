@@ -150,23 +150,41 @@ const handleRegister = async () => {
       formData.append('icon', iconFile.value)
     }
     
-    const res = await fetch('http://localhost:3000/register', {
-      method: 'POST',
-      body: formData // Content-Typeはブラウザが自動設定
+    console.log('登録処理開始:', {
+      username: username.value,
+      email: email.value,
+      hasIcon: !!iconFile.value
     })
     
-    const data = await res.json()
+    // fetchの設定を修正
+    const res = await fetch('http://localhost:3000/register', {
+      method: 'POST',
+      body: formData,
+      credentials: 'same-origin' // 'include'から'same-origin'に変更
+    })
     
     if (!res.ok) {
-      errorMessage.value = data.error || '登録に失敗しました'
-      return
+      // レスポンスのテキストを取得してエラー内容を詳細に表示
+      let errorText;
+      try {
+        const errorData = await res.json();
+        errorText = errorData.error || `登録に失敗しました (${res.status})`;
+      } catch(e) {
+        errorText = `登録に失敗しました (${res.status})`;
+      }
+      errorMessage.value = errorText;
+      console.error('登録失敗:', errorText);
+      return;
     }
+    
+    const data = await res.json()
+    console.log('登録成功:', data)
     
     alert('登録が完了しました')
     router.push('/login')
   } catch (err) {
     console.error('登録エラー:', err)
-    errorMessage.value = 'ネットワークエラーが発生しました'
+    errorMessage.value = 'ネットワークエラーが発生しました: ' + err.message
   }
 }
 </script>

@@ -36,7 +36,12 @@ async function writeUserData(data) {
   await fs.writeFile(userDataFile, JSON.stringify(data, null, 2));
 }
 
-app.use(cors());
+// CORS設定を更新 - ワイルドカードではなく特定のオリジンを許可し、credentialsを有効にする
+app.use(cors({
+  origin: 'http://localhost:5173', // フロントエンドのURL
+  credentials: true
+}));
+
 app.use(express.json());
 
 // USB HDD に保存するための設定
@@ -149,21 +154,27 @@ function authenticateToken(req, res, next) {
   })
 }
 
-// 🔹 ユーザー登録 API - アイコンアップロード対応に修正
+// 🔹 ユーザー登録 API - エラーハンドリング強化
 app.post('/register', upload.single('icon'), async (req, res) => {
+  console.log('登録リクエスト受信:', {
+    body: req.body,
+    file: req.file ? `${req.file.filename} (${req.file.mimetype})` : 'なし'
+  });
+  
   const { username, email, password } = req.body;
   if (!username || !email || !password) {
+    console.log('入力値エラー:', { username, email, password: password ? '***' : undefined });
     return res.status(400).json({ error: '全てのフィールドが必要です' });
   }
 
-  const userData = await readUserData();
-
-  // 同じメールアドレスがないか重複チェック
-  if (userData.users.some(user => user.email === email)) {
-    return res.status(400).json({ error: '既に登録されています' });
-  }
-
   try {
+    const userData = await readUserData();
+
+    // 同じメールアドレスがないか重複チェック
+    if (userData.users.some(user => user.email === email)) {
+      return res.status(400).json({ error: '既に登録されています' });
+    }
+    
     // パスワードのハッシュ化
     const hashedPassword = await bcrypt.hash(password, 10);
     
@@ -182,12 +193,14 @@ app.post('/register', upload.single('icon'), async (req, res) => {
       password: hashedPassword,
       icon_url: iconUrl // アイコンURLを保存
     };
+    
     userData.users.push(newUser);
     await writeUserData(userData);
+    console.log('ユーザー登録成功:', { id: newUser.id, username, email });
     return res.status(201).json({ message: '登録成功' });
   } catch (error) {
     console.error('登録エラー:', error);
-    return res.status(500).json({ error: 'サーバーエラーが発生しました' });
+    return res.status(500).json({ error: 'サーバーエラーが発生しました: ' + error.message });
   }
 });
 
