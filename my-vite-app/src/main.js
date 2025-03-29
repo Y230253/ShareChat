@@ -7,7 +7,8 @@ import authStore from './authStore.js'
 // アプリケーション起動時に認証情報を初期化
 authStore.initAuth()
 
-createApp(App)
-  .use(router)
-  .mount('#app')
+// 認証チェック後にアプリをマウント
+const app = createApp(App)
+app.use(router)
+app.mount('#app')
 
