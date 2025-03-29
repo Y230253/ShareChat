@@ -30,6 +30,13 @@ const routes = [
     path: '/detail/:id',
     component: DetailPost,
     props: true
+  },
+  {
+    path: '/favorite',
+    component: () => import('../src/pages/Favorite.vue'),
+    meta: {
+      showPhotoList: true
+    }
   }
 ]
 

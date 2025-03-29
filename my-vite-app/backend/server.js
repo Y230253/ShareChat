@@ -571,6 +571,59 @@ app.delete('/comments/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// ブックマークした投稿一覧取得API（新規追加）
+app.get('/bookmarked-posts', authenticateToken, async (req, res) => {
+  try {
+    const data = await readData();
+    const userData = await readUserData();
+    const user_id = req.user.id;
+    
+    // このユーザーがブックマークした投稿IDの一覧を取得
+    const bookmarkedPostIds = data.bookmarks
+      .filter(bm => bm.user_id === user_id)
+      .map(bm => bm.post_id);
+    
+    if (bookmarkedPostIds.length === 0) {
+      // ブックマークがない場合は空配列を返す
+      return res.json([]);
+    }
+    
+    // ブックマークした投稿の詳細情報を取得
+    const bookmarkedPosts = data.posts
+      .filter(post => bookmarkedPostIds.includes(post.id))
+      .map(post => {
+        // 画像パス修正
+        if (post.image_url.startsWith('D:/uploads')) {
+          post.image_url = post.image_url.replace('D:/uploads', '/uploads');
+        }
+        if(post.image_url.startsWith('/uploads')) {
+          post.image_url = req.protocol + '://' + req.get('host') + post.image_url;
+        }
+        
+        // 投稿者情報の追加
+        const user = userData.users.find(u => u.id === post.user_id);
+        if (user) {
+          post.username = user.username;
+          post.user_icon = user.icon_url || null;
+        }
+        
+        // いいね・ブックマーク数のカウント
+        post.likeCount = data.likes.filter(like => like.post_id === post.id).length;
+        post.bookmarkCount = data.bookmarks.filter(bookmark => bookmark.post_id === post.id).length;
+        
+        return post;
+      });
+    
+    // 新しい投稿順に並べ替え
+    bookmarkedPosts.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    
+    res.json(bookmarkedPosts);
+  } catch (err) {
+    console.error('ブックマーク投稿取得エラー:', err);
+    res.status(500).json({ error: 'ブックマーク投稿の取得に失敗しました' });
+  }
+});
+
 // サーバー起動時にデータ構造を確認
 app.listen(3000, async () => {
   console.log('Server running on port 3000');

@@ -11,7 +11,7 @@ const props = defineProps({
       <ul>
         <li><router-link to="/">ホーム</router-link></li>
         <li><router-link to="/favorite">お気に入り</router-link></li>
-        <li><a href="#">設定</a></li>
+        <li><a href="#">カテゴリ</a></li>
       </ul>
     </nav>
   </div>
