@@ -159,6 +159,25 @@ const userIconUrl = computed(() => {
   return 'https://via.placeholder.com/40'; // デフォルトアイコン
 });
 
+// メッセージ省略用の定数
+const MAX_MESSAGE_LENGTH = 100 // 最大表示文字数
+
+// 省略表示用のコンピューテッドプロパティ
+const truncatedMessage = computed(() => {
+  if (!props.photo.message) return '';
+  
+  if (props.photo.message.length <= MAX_MESSAGE_LENGTH) {
+    return props.photo.message;
+  }
+  
+  return props.photo.message.substring(0, MAX_MESSAGE_LENGTH) + '...';
+})
+
+// メッセージが長文かどうか
+const isLongMessage = computed(() => {
+  return props.photo.message && props.photo.message.length > MAX_MESSAGE_LENGTH;
+})
+
 // Intersection Observer インスタンス
 let observer = null;
 
@@ -310,7 +329,11 @@ onUnmounted(() => {
       >
     </div>
 
-    <p class="message">{{ photo.message }}</p>
+    <!-- メッセージ表示を省略形式に変更 -->
+    <div class="message-container">
+      <p class="message">{{ truncatedMessage }}</p>
+      <span v-if="isLongMessage" class="read-more" @click.stop="goToDetail">もっと見る</span>
+    </div>
 
     <!-- タグ表示 -->
     <div class="tags">
@@ -430,6 +453,32 @@ onUnmounted(() => {
   color: gray;
   font-size: 12px;
 }
+
+/* メッセージ表示のスタイル改善 */
+.message-container {
+  margin: 10px 0;
+  overflow: hidden;
+}
+
+.message {
+  margin: 0;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.read-more {
+  display: inline-block;
+  color: #42b983;
+  font-size: 0.9rem;
+  margin-top: 5px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.read-more:hover {
+  text-decoration: underline;
+}
+
 .message {
   margin: 10px 0;
 }

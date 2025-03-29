@@ -42,8 +42,10 @@
           <div class="view-full-btn">クリックで拡大表示</div>
         </div>
         
-        <!-- メッセージ -->
-        <p class="message">{{ post.message }}</p>
+        <!-- メッセージ表示をより読みやすく -->
+        <div class="message-container">
+          <p class="message">{{ post.message }}</p>
+        </div>
         
         <!-- タグ表示 -->
         <div v-if="post.tags && post.tags.length > 0" class="tags-container">
@@ -547,11 +549,20 @@ onMounted(() => {
   opacity: 1;
 }
 
+/* メッセージ表示のスタイル改善 */
+.message-container {
+  margin: 15px 0;
+  padding: 15px;
+  background-color: #f9f9f9;
+  border-radius: 8px;
+}
+
 .message {
   font-size: 18px;
-  line-height: 1.5;
-  margin-bottom: 20px;
-  padding: 10px 0;
+  line-height: 1.6;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* タグ表示のスタイル */
