@@ -296,61 +296,71 @@
    ```bash
    gcloud auth list
    ```
-   ```
-   - Cloud Run APIの有効化:
+   - 必要に応じて再認証
    ```bash
-   gcloud services enable run.googleapis.com
+   gcloud auth login
    ```
-   - Cloud Build APIの有効化:
+
+3. **プロジェクト一覧を確認**
    ```bash
-   gcloud services enable cloudbuild.googleapis.com
+   gcloud projects list
    ```
-   - 正常に有効化されたか確認:
+   - 表示されたプロジェクト一覧から正しいプロジェクトIDを特定し使用
+
+### Cloud Build で「Dockerfile required when specifying --tag」エラー
+
+このエラーは、`--tag` オプションを使用する際にDockerfileが必要なことを示しています。
+
+1. **Dockerfileを作成する**
+   - バックエンドディレクトリに `Dockerfile` を作成します
+   - 基本的な Node.js アプリケーション用のDockerfileを記述
+
+2. **Cloud Build コマンドを修正**
    ```bash
-   gcloud services list --enabled | grep -E 'run|build'
+   cd backend
+   gcloud builds submit --tag gcr.io/sharechat-455513/sharechat-backend .
+   ```
+   - `.` を末尾に追加して、現在のディレクトリをビルドコンテキストとして指定
+   - プロジェクトIDを `sharechat-app` から実際のID `sharechat-455513` に変更
+
+3. **別のデプロイ方法を使用**
+   - Dockerfile があるディレクトリで直接Cloud Runにデプロイする方法もあります
+   ```bash
+   gcloud run deploy sharechat-backend \
+     --source . \
+     --platform managed \
+     --region asia-northeast1 \
+     --allow-unauthenticated \
+     --set-env-vars="NODE_ENV=production,GOOGLE_CLOUD_STORAGE_BUCKET=sharechat-media-bucket,JWT_SECRET=your_secret_key"
+   ```
+   - この方法では Google Cloud が自動的に Dockerfile を検出してビルドします
+
+## 修正されたデプロイ手順
+
+1. **正しいプロジェクトを設定**
+   ```bash
+   gcloud config set project sharechat-455513
    ```
 
-### Cloud Run URL の取得方法
-
-1. **デプロイ時に自動表示されるURL**
-   - `gcloud run deploy` コマンドでアプリケーションをデプロイすると、成功時に自動的にURLが表示されます
-   - デプロイ成功メッセージの例:
+2. **APIの有効化を確認**
+   ```bash
+   gcloud services enable run.googleapis.com cloudbuild.googleapis.com storage.googleapis.com
    ```
-   Service [sharechat-backend] revision [sharechat-backend-00001] has been deployed and is serving 100 percent of traffic.
-   Service URL: https://sharechat-backend-abcd123-an.a.run.app
+
+3. **バックエンドのデプロイ**
+   ```bash
+   cd my-vite-app/backend
+   gcloud run deploy sharechat-backend \
+     --source . \
+     --platform managed \
+     --region asia-northeast1 \
+     --allow-unauthenticated \
+     --set-env-vars="NODE_ENV=production,GOOGLE_CLOUD_PROJECT_ID=sharechat-455513,GOOGLE_CLOUD_STORAGE_BUCKET=sharechat-media-bucket,JWT_SECRET=sharechat_app_secret_key_1234567890"
    ```
-   - このURLを `.env.production` ファイルの `VITE_API_URL` に設定します
 
-2. **デプロイ後にURLを確認する方法**
-   - **コンソールから確認:**
-     1. Google Cloud Console (https://console.cloud.google.com/) にログイン
-     2. 左側のナビゲーションメニューで「Cloud Run」をクリック
-     3. デプロイしたサービス名（例: sharechat-backend）をクリック
-     4. 表示される詳細ページの上部にURLが表示されています
-
-   - **gcloudコマンドで確認:**
-     ```bash
-     gcloud run services describe sharechat-backend --platform managed --region asia-northeast1 --format="value(status.url)"
-     ```
-     このコマンドは直接URLだけを出力します
-
-3. **Cloud Run URLの構成について**
-   - 基本形式: `https://[サービス名]-[ランダム文字列]-[リージョンコード].a.run.app`
-   - 例: `https://sharechat-backend-abcd123-an.a.run.app`
-   - このURLは自動生成されますが、以下の方法でカスタム化できます:
-     - サービス名部分はデプロイ時の `--service-name` オプションで指定可能
-     - 完全にカスタムドメインを使用する場合は、Cloud Run のカスタムドメイン設定が必要
-
-4. **フロントエンドからのAPI URL利用方法**
-   - 取得したCloud Run URLを環境変数に設定します:
+4. **デプロイ後にURLを確認**
+   - デプロイ完了時に表示されるURLを記録
+   - または以下のコマンドで取得
+   ```bash
+   gcloud run services describe sharechat-backend --platform managed --region asia-northeast1 --format="value(status.url)"
    ```
-   # .env.production ファイル
-   VITE_API_URL=https://sharechat-backend-abcd123-an.a.run.app
-   ```
-   - この環境変数はフロントエンドビルド時に組み込まれ、apiクライアントの基本URLとして使用されます
-   - ビルド後の変更はできないため、正確なURLを設定してからビルドしてください
-
-5. **URLの確認と動作テスト**
-   - ブラウザで取得したURLにアクセスし、サーバーが応答することを確認
-   - 標準のCloud Run応答または設定したウェルカムページが表示されるはずです
-   - `/health` や `/ping` などのエンドポイントを実装していれば、`[URL]/health` などでAPIの稼働状況が確認できます
