@@ -21,7 +21,7 @@
    - ダウンロードしたキーを `gcp-key.json` としてバックエンドフォルダに保存
 
 ## 2. Cloud Storage の設定
-
+test
 1. **メディア用バケットの作成**
    - [Cloud Storage] > [バケットを作成]
    - 一意の名前を付ける: `sharechat-media-bucket`
