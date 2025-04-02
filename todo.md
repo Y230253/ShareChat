@@ -10,6 +10,7 @@
      - Cloud Run API
      - Cloud Storage API
      - Cloud Build API
+     - Artifact Registry API
 
 2. **サービスアカウントの作成**
    - [IAMと管理] > [サービスアカウント] > [サービスアカウントを作成]
@@ -17,6 +18,7 @@
    - 以下の権限を付与:
      - Cloud Storage 管理者
      - Cloud Run 管理者
+     - Artifact Registry 管理者
    - キーを作成 (JSON形式) してダウンロード
    - ダウンロードしたキーを `gcp-key.json` としてバックエンドフォルダに保存
 
@@ -137,49 +139,54 @@
    npm run build
    ```
 
-## 5. Cloud Run へのデプロイ
+## 5. Cloud Run へのデプロイ (Artifact Registry 使用)
 
 1. **Google Cloud SDKのインストールと認証**
    - [Google Cloud SDK](https://cloud.google.com/sdk/docs/install) をインストール
    - ターミナルを開き、以下を実行:
    ```bash
    gcloud auth login
-   gcloud config set project sharechat-app
+   gcloud config set project sharechat-455513
    ```
 
-2. **app.yaml ファイルの作成**
-   - バックエンドディレクトリ（`backend`フォルダ）のルートに`app.yaml`ファイルを作成します
-   ```yaml
-   runtime: nodejs16
-   env: standard
-   instance_class: F2
-
-   env_variables:
-     NODE_ENV: "production"
-     GOOGLE_CLOUD_PROJECT_ID: "sharechat-app"
-     GOOGLE_CLOUD_STORAGE_BUCKET: "sharechat-media-bucket"
-     JWT_SECRET: "あなたの独自のJWTシークレット"
-
-   handlers:
-   - url: /.*
-     secure: always
-     redirect_http_response_code: 301
-     script: auto
+2. **Artifact Registry の設定**
+   - Artifact Registry APIを有効化:
+   ```bash
+   gcloud services enable artifactregistry.googleapis.com
    ```
-   - このファイルはバックエンドサービスの実行環境設定を定義します
-   - Cloud Run デプロイ時に必要な環境変数を含めています
+   - Container Registryから移行する場合:
+   ```bash
+   gcloud artifacts docker upgrade migrate --projects='sharechat-455513'
+   ```
+   - または新しいリポジトリを作成:
+   ```bash
+   gcloud artifacts repositories create sharechat-repo \
+       --repository-format=docker \
+       --location=asia-northeast1 \
+       --description="ShareChat Docker Repository"
+   ```
 
 3. **バックエンドを Cloud Run にデプロイ**
    ```bash
+   # バックエンドディレクトリに移動
    cd backend
-   gcloud builds submit --tag gcr.io/sharechat-app/sharechat-backend
+   
+   # イメージをビルドしてArtifact Registryにプッシュ
+   gcloud builds submit --tag asia-northeast1-docker.pkg.dev/sharechat-455513/sharechat-repo/sharechat-backend
+   
+   # Cloud Runにデプロイ
    gcloud run deploy sharechat-backend \
-     --image gcr.io/sharechat-app/sharechat-backend \
+     --image asia-northeast1-docker.pkg.dev/sharechat-455513/sharechat-repo/sharechat-backend \
      --platform managed \
      --region asia-northeast1 \
      --allow-unauthenticated \
-     --set-env-vars="NODE_ENV=production,GOOGLE_CLOUD_STORAGE_BUCKET=sharechat-media-bucket,JWT_SECRET=あなたの独自のJWTシークレット"
+     --set-env-vars="NODE_ENV=production,GOOGLE_CLOUD_PROJECT_ID=sharechat-455513,GOOGLE_CLOUD_STORAGE_BUCKET=sharechat-media-bucket,JWT_SECRET=nishichopass"
    ```
+   gcloud run deploy sharechat-backend `
+   --image asia-northeast1-docker.pkg.dev/sharechat-455513/sharechat-repo/sharechat-backend `
+   --platform managed `
+   --region asia-northeast1 `
+   --allow-unauthenticated `
 
 4. **フロントエンドを Cloud Storage にデプロイ**
    ```bash
@@ -192,6 +199,13 @@
    ```bash
    gsutil iam ch allUsers:objectViewer gs://sharechat-media-bucket/frontend
    ```
+
+6. **デプロイ後のURLを取得して設定**
+   ```bash
+   # バックエンドのURLを取得
+   gcloud run services describe sharechat-backend --platform managed --region asia-northeast1 --format="value(status.url)"
+   ```
+   - 取得したURLを `.env.production` ファイルの `VITE_API_URL` に設定
 
 ## 6. ドメインとCDN設定 (オプション)
 
@@ -335,109 +349,29 @@
    ```
    - この方法では Google Cloud が自動的に Dockerfile を検出してビルドします
 
-## 修正されたデプロイ手順
+## Container Registry から Artifact Registry への移行
 
-1. **正しいプロジェクトを設定**
+Container Registry は非推奨となり、2024年5月末に廃止される予定です。代わりに Artifact Registry を使用する必要があります。
+
+1. **Artifact Registryへの移行**
    ```bash
-   gcloud config set project sharechat-455513
+   # Artifact Registry APIを有効化
+   gcloud services enable artifactregistry.googleapis.com
+   
+   # 自動移行ツールを実行
+   gcloud artifacts docker upgrade migrate --projects='sharechat-455513'
    ```
 
-2. **APIの有効化を確認**
-   ```bash
-   gcloud services enable run.googleapis.com cloudbuild.googleapis.com storage.googleapis.com
-   ```
+2. **移行後のイメージパス**
+   - 古いパス: `gcr.io/sharechat-455513/sharechat-backend`
+   - 新しいパス: `asia-northeast1-docker.pkg.dev/sharechat-455513/sharechat-repo/sharechat-backend`
 
-3. **バックエンドのデプロイ**
+3. **デプロイコマンドの更新**
    ```bash
-   cd my-vite-app/backend
    gcloud run deploy sharechat-backend \
-     --source . \
+     --image asia-northeast1-docker.pkg.dev/sharechat-455513/sharechat-repo/sharechat-backend \
      --platform managed \
      --region asia-northeast1 \
      --allow-unauthenticated \
      --set-env-vars="NODE_ENV=production,GOOGLE_CLOUD_PROJECT_ID=sharechat-455513,GOOGLE_CLOUD_STORAGE_BUCKET=sharechat-media-bucket,JWT_SECRET=sharechat_app_secret_key_1234567890"
    ```
-
-4. **デプロイ後にURLを確認**
-   - デプロイ完了時に表示されるURLを記録
-   - または以下のコマンドで取得
-   ```bash
-   gcloud run services describe sharechat-backend --platform managed --region asia-northeast1 --format="value(status.url)"
-   ```
-
-## 修正された手順: package.jsonエラーの解決
-
-この問題は、バックエンドディレクトリに `package.json` ファイルが存在しないために発生しています。以下の手順でエラーを解決します：
-
-1. **package.jsonファイルの作成**
-   ```bash
-   cd my-vite-app/backend
-   
-   # package.jsonを作成
-   cat > package.json << 'EOL'
-   {
-     "name": "sharechat-backend",
-     "version": "1.0.0",
-     "description": "ShareChat application backend",
-     "main": "server.js",
-     "type": "module",
-     "scripts": {
-       "start": "node server.js",
-       "dev": "nodemon server.js"
-     },
-     "dependencies": {
-       "@google-cloud/storage": "^7.7.0",
-       "bcryptjs": "^2.4.3",
-       "cors": "^2.8.5",
-       "dotenv": "^16.3.1",
-       "express": "^4.18.2",
-       "jsonwebtoken": "^9.0.2",
-       "multer": "^1.4.5-lts.1",
-       "stream": "^0.0.2"
-     },
-     "devDependencies": {
-       "nodemon": "^3.0.2"
-     },
-     "engines": {
-       "node": ">=18.0.0"
-     },
-     "author": "",
-     "license": "ISC"
-   }
-   EOL
-   ```
-
-2. **デプロイコマンドの修正** 
-   - 適切なプロジェクトIDを使用:
-   ```bash
-   # 正しいプロジェクトIDを設定
-   gcloud config set project sharechat-455513
-   
-   # ビルドとデプロイ（一括で実行）
-   gcloud run deploy sharechat-backend \
-     --source . \
-     --platform managed \
-     --region asia-northeast1 \
-     --allow-unauthenticated \
-     --set-env-vars="NODE_ENV=production,GOOGLE_CLOUD_PROJECT_ID=sharechat-455513,GOOGLE_CLOUD_STORAGE_BUCKET=sharechat-media-bucket,JWT_SECRET=sharechat_app_secret_key_1234567890"
-   ```
-
-3. **ビルドエラーのデバッグ方法**
-   - `gcloud run deploy` コマンドが失敗した場合:
-   ```bash
-   # ビルドログを詳細に表示
-   gcloud builds list --filter="source.repoSource.repoName=sharechat-backend"
-   
-   # 特定のビルドIDの詳細ログを表示
-   gcloud builds log [BUILD_ID]
-   ```
-   
-   - 失敗したビルドのデバッグ:
-   ```bash
-   # ローカルでDockerビルドをテスト
-   docker build -t sharechat-backend .
-   ```
-
-## Container Registry エラーと Artifact Registry への移行
-
-Container Registry は非推奨となり、代わりに Artifact Registry を使用する必要があります。以下のエラーが表示された場合は、Artifact Registry への移行が必要です：
