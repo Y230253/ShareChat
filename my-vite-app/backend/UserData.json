@@ -1,11 +1,3 @@
 {
-  "users": [
-    {
-      "id": 1,
-      "username": "ぺのむ",
-      "email": "2004asano@gmail.com",
-      "password": "$2b$10$./FO/tUfJOz7LSAZR9vlZO1rksFAR1KHXEmwOz86tXal5gdJ/nTiG",
-      "icon_url": "http://localhost:3000/uploads/1743074430244.png"
-    }
-  ]
+  "users": []
 }

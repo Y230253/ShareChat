@@ -21,29 +21,78 @@
    - ダウンロードしたキーを `gcp-key.json` としてバックエンドフォルダに保存
 
 ## 2. Cloud Storage の設定
-test
-1. **メディア用バケットの作成**
-   - [Cloud Storage] > [バケットを作成]
-   - 一意の名前を付ける: `sharechat-media-bucket`
-   - リージョン選択: `asia-northeast1` (東京)
-   - アクセス制御: 「均一」を選択
-   - [公開アクセス防止] を無効化
-   - バケットを作成
 
-2. **バケットのアクセス権設定**
-   - 作成したバケットを選択 > [権限] タブ
-   - [メンバーを追加] > 「allUsers」を入力
-   - [Cloud Storage] > [Storage Object Viewer] 役割を選択
-   - [保存] をクリック (メディアファイルを公開アクセス可能に)
+1. **メディア用バケットの作成**
+   - Google Cloud Console (https://console.cloud.google.com/) にログイン
+   - 左側のナビゲーションメニューから「Cloud Storage」 > 「ブラウザ」をクリック
+   - 上部の「バケットを作成」ボタンをクリック
+   - バケット名を入力: `sharechat-media-bucket` (または他の一意の名前、世界中で唯一である必要があります)
+   - 「ロケーションタイプ」で「リージョン」を選択、「asia-northeast1」(東京)を選びます
+   - 「ストレージクラス」はデフォルト「Standard」のまま
+   - 「アクセス制御」で「均一」を選択（これにより、バケット内のすべてのオブジェクトに同じアクセス設定が適用されます）
+   - 「公開アクセスの防止」のチェックを外す（これにより、後で公開アクセスを許可できます）
+   - 「作成」をクリックしてバケットを作成
+
+2. **バケットのアクセス権設定 (メディアファイルを公開アクセス可能にする)**
+   - 作成したバケット名をクリックして開く
+   - 「権限」タブをクリック
+   - 「メンバーを追加」ボタンをクリック
+   - 「新しいプリンシパル」欄に「allUsers」と入力（これは「インターネット上のすべてのユーザー」を意味します）
+   - 「ロールを選択」で「Cloud Storage」カテゴリー > 「Storage オブジェクト閲覧者」を選択
+   （これにより、バケット内のファイルがインターネット上で公開されます）
+   - 「保存」をクリックして権限を適用
+   - 警告が表示される場合は「確認」をクリックして続行
 
 3. **フォルダ構造の作成**
-   - `uploads/` フォルダを作成 (メディアファイル用)
-   - `data/` フォルダを作成 (JSONデータ用)
+   - 注意: Cloud Storageの「フォルダ」は実際にはプレフィックスを持つオブジェクトのグループです
+   - バケットの詳細画面で「オブジェクト」タブを選択
+   - 「フォルダを作成」ボタンをクリック
+   - フォルダ名「uploads」を入力し「作成」をクリック
+   - 同様の手順で「data」フォルダも作成
+   
+   またはgsutilコマンドでの作成方法（Cloud Shell または Google Cloud SDKがインストールされた環境で）：
+   ```bash
+   # 空のファイルを作成してフォルダ構造を表現
+   gsutil cp /dev/null gs://sharechat-media-bucket/uploads/
+   gsutil cp /dev/null gs://sharechat-media-bucket/data/
+   ```
 
 4. **初期データファイルのアップロード**
-   - データフォルダ内に以下のファイルを作成またはアップロード:
-     - `UserData.json` (空の場合: `{"users":[]}`)
-     - `PhotoData.json` (空の場合: `{"users":[],"posts":[],"likes":[],"bookmarks":[],"comments":[],"tags":[]}`)
+   
+   **ウェブコンソールでのアップロード:**
+   - 「data」フォルダをクリックして開く
+   - 「アップロード」ボタンをクリック
+   - ローカルに作成したJSONファイルを選択するか、以下の手順で新規ファイルを作成：
+   
+   **空のデータファイルをローカルで作成する場合:**
+   - テキストエディタで新規ファイル「UserData.json」を作成し、内容を入力:
+     ```json
+     {"users":[]}
+     ```
+   - 同様に「PhotoData.json」ファイルを作成:
+     ```json
+     {"users":[],"posts":[],"likes":[],"bookmarks":[],"comments":[],"tags":[]}
+     ```
+   - これらのファイルをCloud Storageにアップロード
+   
+   **gsutilコマンドでのアップロード:**
+   ```bash
+   # ローカルでJSONファイルを作成
+   echo '{"users":[]}' > UserData.json
+   echo '{"users":[],"posts":[],"likes":[],"bookmarks":[],"comments":[],"tags":[]}' > PhotoData.json
+   
+   # Cloud Storageにアップロード
+   gsutil cp UserData.json gs://sharechat-media-bucket/data/
+   gsutil cp PhotoData.json gs://sharechat-media-bucket/data/
+   ```
+
+5. **アップロード確認とアクセスURL**
+   - アップロードしたファイルをクリックすると詳細が表示されます
+   - 「公開URL」リンクをコピーして、ブラウザで開き、ファイルが公開アクセス可能か確認
+   - メディアファイル用の基本URLは次のような形式になります：
+     `https://storage.googleapis.com/sharechat-media-bucket/uploads/`
+   - JSONデータファイル用の基本URLは次のようになります：
+     `https://storage.googleapis.com/sharechat-media-bucket/data/`
 
 ## 3. バックエンドの準備
 
