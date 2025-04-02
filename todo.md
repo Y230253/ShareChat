@@ -274,3 +274,80 @@
 7. **大容量ファイルの問題**
    - リポジトリサイズ制限を超えていないか確認
    - 大きなファイルは Git LFS の使用を検討
+
+## 詳細な手順ガイド
+
+### Cloud Run API と Cloud Build API の有効化方法
+
+1. **Google Cloud Consoleからの有効化手順**
+   - Google Cloud Console (https://console.cloud.google.com/) にログイン
+   - 左側のナビゲーションメニューで「APIとサービス」 > 「ダッシュボード」をクリック
+   - 上部の「+ APIとサービスを有効化」ボタンをクリック
+   - 検索バーに「Cloud Run」と入力し、表示された「Cloud Run API」をクリック
+   - 「有効にする」ボタンをクリック
+   - 同様の手順で「Cloud Build」を検索し「Cloud Build API」を有効化
+
+2. **gcloudコマンドラインからの有効化手順**
+   - ターミナル/コマンドプロンプトを開く
+   - Google Cloud SDKがインストールされていることを確認
+   - 以下のコマンドを実行して対象プロジェクトを設定（まだ設定していない場合）:
+   ```bash
+   gcloud config set project sharechat-app
+   ```
+   - Cloud Run APIの有効化:
+   ```bash
+   gcloud services enable run.googleapis.com
+   ```
+   - Cloud Build APIの有効化:
+   ```bash
+   gcloud services enable cloudbuild.googleapis.com
+   ```
+   - 正常に有効化されたか確認:
+   ```bash
+   gcloud services list --enabled | grep -E 'run|build'
+   ```
+
+### Cloud Run URL の取得方法
+
+1. **デプロイ時に自動表示されるURL**
+   - `gcloud run deploy` コマンドでアプリケーションをデプロイすると、成功時に自動的にURLが表示されます
+   - デプロイ成功メッセージの例:
+   ```
+   Service [sharechat-backend] revision [sharechat-backend-00001] has been deployed and is serving 100 percent of traffic.
+   Service URL: https://sharechat-backend-abcd123-an.a.run.app
+   ```
+   - このURLを `.env.production` ファイルの `VITE_API_URL` に設定します
+
+2. **デプロイ後にURLを確認する方法**
+   - **コンソールから確認:**
+     1. Google Cloud Console (https://console.cloud.google.com/) にログイン
+     2. 左側のナビゲーションメニューで「Cloud Run」をクリック
+     3. デプロイしたサービス名（例: sharechat-backend）をクリック
+     4. 表示される詳細ページの上部にURLが表示されています
+
+   - **gcloudコマンドで確認:**
+     ```bash
+     gcloud run services describe sharechat-backend --platform managed --region asia-northeast1 --format="value(status.url)"
+     ```
+     このコマンドは直接URLだけを出力します
+
+3. **Cloud Run URLの構成について**
+   - 基本形式: `https://[サービス名]-[ランダム文字列]-[リージョンコード].a.run.app`
+   - 例: `https://sharechat-backend-abcd123-an.a.run.app`
+   - このURLは自動生成されますが、以下の方法でカスタム化できます:
+     - サービス名部分はデプロイ時の `--service-name` オプションで指定可能
+     - 完全にカスタムドメインを使用する場合は、Cloud Run のカスタムドメイン設定が必要
+
+4. **フロントエンドからのAPI URL利用方法**
+   - 取得したCloud Run URLを環境変数に設定します:
+   ```
+   # .env.production ファイル
+   VITE_API_URL=https://sharechat-backend-abcd123-an.a.run.app
+   ```
+   - この環境変数はフロントエンドビルド時に組み込まれ、apiクライアントの基本URLとして使用されます
+   - ビルド後の変更はできないため、正確なURLを設定してからビルドしてください
+
+5. **URLの確認と動作テスト**
+   - ブラウザで取得したURLにアクセスし、サーバーが応答することを確認
+   - 標準のCloud Run応答または設定したウェルカムページが表示されるはずです
+   - `/health` や `/ping` などのエンドポイントを実装していれば、`[URL]/health` などでAPIの稼働状況が確認できます
