@@ -2,6 +2,10 @@
 echo ShareChat デプロイスクリプト
 echo ============================
 
+echo 0. フロントエンドのビルドファイルをバックエンドディレクトリにコピー
+IF NOT EXIST "dist" mkdir dist
+xcopy /E /Y "..\dist" "dist\"
+
 echo 1. バックエンドイメージのビルドとプッシュ
 gcloud builds submit --tag asia-northeast1-docker.pkg.dev/sharechat-455513/sharechat-repo/sharechat-backend
 
@@ -17,4 +21,3 @@ echo 3. デプロイしたURLを取得
 gcloud run services describe sharechat-backend --platform managed --region asia-northeast1 --format="value(status.url)"
 
 echo デプロイ完了！上記のURLがバックエンドのエンドポイントです。
-echo フロントエンドの .env.production ファイルを更新してください。

@@ -9,8 +9,8 @@ RUN npm install
 # サービスアカウントキーをコピー
 COPY gcp-key.json .
 
-# フロントエンドファイルのコピーを追加
-COPY ../dist /app/dist
+# フロントエンドファイルのコピー（パスを修正）
+COPY dist/ /app/dist/
 
 # アプリケーションのソースをコピー
 COPY *.js ./
