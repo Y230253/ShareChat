@@ -332,6 +332,44 @@ app.post('/posts', authenticateToken, async (req, res) => {
   }
 });
 
+// server.js に追加
+app.get('/', (req, res) => {
+  res.json({ message: "ShareChat API Server is running" });
+});
+
+// ヘルスチェックエンドポイント
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', message: "ShareChat API Health Check OK" });
+});
+
+// ユーザー一覧取得API
+app.get('/api/users', async (req, res) => {
+  try {
+    const userData = await readUserData();
+    // パスワードなどの機密情報を除いて返す
+    const safeUserData = userData.users.map(user => ({
+      id: user.id,
+      username: user.username,
+      icon_url: user.icon_url
+    }));
+    res.json(safeUserData);
+  } catch (err) {
+    console.error('ユーザー情報取得エラー:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+// 投稿一覧取得API
+app.get('/api/photos', async (req, res) => {
+  try {
+    const data = await readData();
+    res.json(data.posts);
+  } catch (err) {
+    console.error('投稿一覧取得エラー:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
 // サーバー起動時にデータ構造を確認
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, async () => {
