@@ -33,6 +33,9 @@ const JWT_SECRET = process.env.JWT_SECRET || 'sharechat_app_secret_key_123456789
 app.use(cors());
 app.use(express.json());
 
+// 静的ファイルを提供する設定
+app.use(express.static(path.join(__dirname, '../dist')));
+
 // ファイル読み書き用ヘルパー関数 - Cloud Storage対応
 async function readGCSFile(filePath) {
   try {
@@ -368,6 +371,16 @@ app.get('/api/photos', async (req, res) => {
     console.error('投稿一覧取得エラー:', err);
     res.status(500).json({ error: 'サーバーエラーが発生しました' });
   }
+});
+
+// すべての他のリクエストをindex.htmlにリダイレクト（SPAルーティング用）
+// ※必ず他のルートの最後に配置
+app.get('*', (req, res) => {
+  // APIリクエストの場合は処理しない
+  if (req.path.startsWith('/api/') || req.path === '/health') {
+    return res.status(404).json({ error: 'APIエンドポイントが見つかりません' });
+  }
+  res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
 // サーバー起動時にデータ構造を確認
