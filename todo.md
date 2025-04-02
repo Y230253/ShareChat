@@ -148,6 +148,7 @@
    ```
 
 2. **app.yaml ファイルの作成**
+   - バックエンドディレクトリ（`backend`フォルダ）のルートに`app.yaml`ファイルを作成します
    ```yaml
    runtime: nodejs16
    env: standard
@@ -165,6 +166,8 @@
      redirect_http_response_code: 301
      script: auto
    ```
+   - このファイルはバックエンドサービスの実行環境設定を定義します
+   - Cloud Run デプロイ時に必要な環境変数を含めています
 
 3. **バックエンドを Cloud Run にデプロイ**
    ```bash

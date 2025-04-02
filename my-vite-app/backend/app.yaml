@@ -1,0 +1,15 @@
+runtime: nodejs16
+   env: standard
+   instance_class: F2
+
+   env_variables:
+     NODE_ENV: "production"
+     GOOGLE_CLOUD_PROJECT_ID: "sharechat-app"
+     GOOGLE_CLOUD_STORAGE_BUCKET: "sharechat-media-bucket"
+     JWT_SECRET: "あなたの独自のJWTシークレット"
+
+   handlers:
+   - url: /.*
+     secure: always
+     redirect_http_response_code: 301
+     script: auto
