@@ -364,3 +364,80 @@
    ```bash
    gcloud run services describe sharechat-backend --platform managed --region asia-northeast1 --format="value(status.url)"
    ```
+
+## 修正された手順: package.jsonエラーの解決
+
+この問題は、バックエンドディレクトリに `package.json` ファイルが存在しないために発生しています。以下の手順でエラーを解決します：
+
+1. **package.jsonファイルの作成**
+   ```bash
+   cd my-vite-app/backend
+   
+   # package.jsonを作成
+   cat > package.json << 'EOL'
+   {
+     "name": "sharechat-backend",
+     "version": "1.0.0",
+     "description": "ShareChat application backend",
+     "main": "server.js",
+     "type": "module",
+     "scripts": {
+       "start": "node server.js",
+       "dev": "nodemon server.js"
+     },
+     "dependencies": {
+       "@google-cloud/storage": "^7.7.0",
+       "bcryptjs": "^2.4.3",
+       "cors": "^2.8.5",
+       "dotenv": "^16.3.1",
+       "express": "^4.18.2",
+       "jsonwebtoken": "^9.0.2",
+       "multer": "^1.4.5-lts.1",
+       "stream": "^0.0.2"
+     },
+     "devDependencies": {
+       "nodemon": "^3.0.2"
+     },
+     "engines": {
+       "node": ">=18.0.0"
+     },
+     "author": "",
+     "license": "ISC"
+   }
+   EOL
+   ```
+
+2. **デプロイコマンドの修正** 
+   - 適切なプロジェクトIDを使用:
+   ```bash
+   # 正しいプロジェクトIDを設定
+   gcloud config set project sharechat-455513
+   
+   # ビルドとデプロイ（一括で実行）
+   gcloud run deploy sharechat-backend \
+     --source . \
+     --platform managed \
+     --region asia-northeast1 \
+     --allow-unauthenticated \
+     --set-env-vars="NODE_ENV=production,GOOGLE_CLOUD_PROJECT_ID=sharechat-455513,GOOGLE_CLOUD_STORAGE_BUCKET=sharechat-media-bucket,JWT_SECRET=sharechat_app_secret_key_1234567890"
+   ```
+
+3. **ビルドエラーのデバッグ方法**
+   - `gcloud run deploy` コマンドが失敗した場合:
+   ```bash
+   # ビルドログを詳細に表示
+   gcloud builds list --filter="source.repoSource.repoName=sharechat-backend"
+   
+   # 特定のビルドIDの詳細ログを表示
+   gcloud builds log [BUILD_ID]
+   ```
+   
+   - 失敗したビルドのデバッグ:
+   ```bash
+   # ローカルでDockerビルドをテスト
+   docker build -t sharechat-backend .
+   ```
+
+## Container Registry エラーと Artifact Registry への移行
+
+Container Registry は非推奨となり、代わりに Artifact Registry を使用する必要があります。以下のエラーが表示された場合は、Artifact Registry への移行が必要です：
