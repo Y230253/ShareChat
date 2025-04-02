@@ -278,24 +278,24 @@
    - リポジトリサイズ制限を超えていないか確認
    - 大きなファイルは Git LFS の使用を検討
 
-## 詳細な手順ガイド
+## トラブルシューティング
 
-### Cloud Run API と Cloud Build API の有効化方法
+### プロジェクト権限エラー「Project not found or permission denied」
 
-1. **Google Cloud Consoleからの有効化手順**
-   - Google Cloud Console (https://console.cloud.google.com/) にログイン
-   - 左側のナビゲーションメニューで「APIとサービス」 > 「ダッシュボード」をクリック
-   - 上部の「+ APIとサービスを有効化」ボタンをクリック
-   - 検索バーに「Cloud Run」と入力し、表示された「Cloud Run API」をクリック
-   - 「有効にする」ボタンをクリック
-   - 同様の手順で「Cloud Build」を検索し「Cloud Build API」を有効化
+このエラーが発生する場合は、以下の手順で解決します：
 
-2. **gcloudコマンドラインからの有効化手順**
-   - ターミナル/コマンドプロンプトを開く
-   - Google Cloud SDKがインストールされていることを確認
-   - 以下のコマンドを実行して対象プロジェクトを設定（まだ設定していない場合）:
+1. **正しいプロジェクトIDを設定する**
+   - GCP Console で確認したプロジェクトIDを使用します
+   - プロジェクトID は `sharechat-app` ではなく `sharechat-455513` のようなIDである可能性があります
    ```bash
-   gcloud config set project sharechat-app
+   gcloud config set project sharechat-455513
+   ```
+
+2. **アカウント認証を確認**
+   - 現在のアカウント認証状況を確認
+   ```bash
+   gcloud auth list
+   ```
    ```
    - Cloud Run APIの有効化:
    ```bash
