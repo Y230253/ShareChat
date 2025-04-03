@@ -54,8 +54,8 @@ const routes = [
 ]
 
 const router = createRouter({
-  // ハッシュベースからHTML5履歴モードに変更
-  history: createWebHistory(),
+  // 認証URLでも動作するようにベースパスを相対パスに
+  history: createWebHistory('./'),
   routes,
 })
 

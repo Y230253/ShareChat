@@ -7,13 +7,22 @@ import authStore from './authStore'
 // キャッシュバスティング用のコード
 console.log('App initializing with build timestamp:', new Date().toISOString())
 
-// キャッシュされたコンポーネントを強制的にリフレッシュする処理
+// 自動リフレッシュを無効化 - 無限リロードループの原因になっていた
+// 以下のルーターフックをコメントアウトまたは削除
+/*
 router.beforeEach((to, from, next) => {
   if (to.path === from.path && to.hash === from.hash) {
     console.log('Same route detected, forcing refresh')
     window.location.reload()
     return
   }
+  console.log(`Route change: ${from.path} -> ${to.path}`)
+  next()
+})
+*/
+
+// 代わりにシンプルなログのみ出力するフックに変更
+router.beforeEach((to, from, next) => {
   console.log(`Route change: ${from.path} -> ${to.path}`)
   next()
 })

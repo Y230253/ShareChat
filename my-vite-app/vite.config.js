@@ -1,17 +1,28 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
-// https://vite.dev/config/
+// https://vitejs.dev/config/
 export default defineConfig({
-  // 相対パスに変更
-  base: './',
   plugins: [vue()],
-  // Cloud Run環境のための本番設定
+  // 認証URLでも動作するようにベースパスを完全相対パスに設定
+  base: '',
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
     emptyOutDir: true,
-    sourcemap: false, // 本番環境ではソースマップ無効化
+    // ソースマップはデバッグ中のみ有効にする
+    sourcemap: false,
+    // アセットのパス解決方法を調整
+    rollupOptions: {
+      output: {
+        // チャンクのファイル名パターンを修正（ハッシュを短くする）
+        chunkFileNames: 'assets/[name].[hash:8].js',
+        entryFileNames: 'assets/[name].[hash:8].js',
+        assetFileNames: 'assets/[name].[hash:8].[ext]',
+        // マニュアルチャンクを無効化
+        manualChunks: undefined
+      }
+    }
   },
   // 環境変数プレフィックス設定
   envPrefix: 'VITE_',

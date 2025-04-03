@@ -39,7 +39,6 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <h1>unko</h1>
  <router-view />
 </template>
 
