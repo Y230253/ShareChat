@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
 import Home from '../src/pages/Home.vue'
 import Favorite from '../src/pages/Favorite.vue'
 import PostForm from '../src/pages/PostForm.vue' // PostForm.vue がこのパスに存在するか確認
@@ -10,7 +10,7 @@ const routes = [
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHashHistory(),
   routes,
 })
 
