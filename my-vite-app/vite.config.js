@@ -3,6 +3,8 @@ import vue from '@vitejs/plugin-vue'
 
 // https://vite.dev/config/
 export default defineConfig({
+  // Cloud Storage上のパスに合わせる
+  base: '/sharechat-media-bucket/frontend/',
   plugins: [vue()],
   // Cloud Run環境のための本番設定
   build: {
