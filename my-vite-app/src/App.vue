@@ -39,7 +39,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <router-view />
+  <h1>test</h1>
 </template>
 
 <style>
