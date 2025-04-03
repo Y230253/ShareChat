@@ -1,0 +1,75 @@
+# ShareChat アプリデプロイ手順
+
+## 事前準備
+1. Google Cloud SDK がインストールされていること
+2. `gcloud auth login` で認証が完了していること
+3. npm がインストールされていること
+
+## 認証問題の解決方法
+文字化けメッセージが表示される、または認証エラーが発生した場合は、以下のコマンドを実行してください：
+
+```
+gcloud auth login
+gcloud auth application-default login
+```
+
+## デプロイ手順
+
+### 1. PowerShell で実行する場合（推奨）
+PowerShell を管理者権限で開き、以下のコマンドを実行します：
+
+```
+cd c:\Users\2004a\Shacha\ShareChat\my-vite-app
+.\check-gcs-setup.ps1
+.\deploy-frontend-english.bat
+.\set-spa-routing.ps1
+```
+
+### 2. コマンドプロンプトで実行する場合
+コマンドプロンプトを管理者権限で開き、以下のコマンドを実行します：
+
+```
+cd c:\Users\2004a\Shacha\ShareChat\my-vite-app
+check-gcs-setup.bat
+deploy-frontend-english.bat
+PowerShell -ExecutionPolicy Bypass -File set-spa-routing.ps1
+```
+
+## PowerShellスクリプト実行ポリシーの設定
+PowerShellスクリプトを実行する際に「実行が無効」というエラーが出た場合は、以下のコマンドを管理者権限のPowerShellで実行してください：
+
+```
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+## トラブルシューティング
+
+### アクセス権限の問題
+- Google Cloud Console で sharechat-media-bucket のアクセス設定を確認してください
+- 「IAMと管理」で適切な権限が設定されているか確認してください
+- 以下のコマンドで権限を確認できます：
+  ```
+  gsutil iam get gs://sharechat-media-bucket
+  ```
+
+### 文字化けが発生する場合
+- PowerShell スクリプト (.ps1) を使用してください
+- または英語版のスクリプト (deploy-frontend-english.bat) を使用してください
+
+### SPA ルーティングが機能しない場合
+- ブラウザのキャッシュをクリアしてください
+- set-spa-routing.ps1 スクリプトを再実行してください
+- Google Cloud Storage の公開ウェブサイトの制限を確認し、必要に応じて Firebase Hosting または
+  Cloud Load Balancer への移行を検討してください
+
+### バケットにファイルがアップロードできない場合
+- バケットが存在することを確認：
+  ```
+  gsutil ls
+  ```
+- バケットにテストファイルを作成できるか確認：
+  ```
+  echo test > test.txt
+  gsutil cp test.txt gs://sharechat-media-bucket/test.txt
+  gsutil rm gs://sharechat-media-bucket/test.txt
+  ```
