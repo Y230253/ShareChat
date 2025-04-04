@@ -26,4 +26,15 @@ export default defineConfig({
   },
   // 環境変数プレフィックス設定
   envPrefix: 'VITE_',
+  // 開発サーバー設定
+  server: {
+    proxy: {
+      // 開発時にAPIリクエストをプロキシする設定
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, '')
+      }
+    }
+  }
 })
