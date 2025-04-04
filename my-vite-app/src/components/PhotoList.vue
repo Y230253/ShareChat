@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import PhotoItem from "./PhotoItem.vue";
 import authStore from '../authStore.js';
 import { api } from '../services/api'; // APIサービスをインポート
+import { mockPosts } from '../services/mock-data'; // モックデータをインポート
 
 const props = defineProps({
   sidebarOpen: {
@@ -41,7 +42,11 @@ const loadPosts = async () => {
     photos.value = await api.posts.getAll();
   } catch (err) {
     console.error('投稿取得エラー', err);
-    error.value = '投稿の読み込みに失敗しました';
+    error.value = '投稿の読み込みに失敗しました - モックデータを表示します';
+    
+    // APIエラーが発生した場合はモックデータを使用
+    console.log('モックデータを使用します');
+    photos.value = mockPosts;
   } finally {
     isLoading.value = false;
   }

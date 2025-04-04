@@ -92,108 +92,89 @@
 <script setup>
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
+import Header from '../components/header.vue';
+import Sidebar from '../components/Sidebar.vue';
 import { api } from '../services/api'; // APIサービスをインポート
 
+const router = useRouter();
 const username = ref('');
 const email = ref('');
 const password = ref('');
 const confirmPassword = ref('');
-const error = ref('');
-const router = useRouter();
+const isSidebarOpen = ref(false);
+const showPassword = ref(false);
+const errorMessage = ref('');
 
-const register = async (e) => {
-  e.preventDefault();
-  
-  if (password.value !== confirmPassword.value) {
-    error.value = 'パスワードが一致しません';
-    return;
-  }
-  
-  try {
-    // 直接fetchの代わりにAPIサービスを使用
-    await api.auth.register({
-      username: username.value,
-      email: email.value,
-      password: password.value
-    });
-    
-    console.log('登録成功！');
-    router.push('/login');
-  } catch (err) {
-    console.error('登録エラー:', err);
-    error.value = err.message || '登録に失敗しました。もう一度お試しください。';
+// アイコン画像関連
+const iconFile = ref(null);
+const iconPreview = ref('');
+
+const toggleSidebar = () => {
+  isSidebarOpen.value = !isSidebarOpen.value;
+};
+
+const togglePassword = () => {
+  showPassword.value = !showPassword.value;
+};
+
+const handleIconChange = (event) => {
+  const file = event.target.files[0];
+  if (file) {
+    iconFile.value = file;
+    iconPreview.value = URL.createObjectURL(file);
   }
 };
 
-const isSidebarOpen = ref(false)
-const showPassword = ref(false)
-const errorMessage = ref('')
-
-// アイコン画像関連
-const iconFile = ref(null)
-const iconPreview = ref('')
-
-const toggleSidebar = () => {
-  isSidebarOpen.value = !isSidebarOpen.value
-}
-
-const togglePassword = () => {
-  showPassword.value = !showPassword.value
-}
-
-const handleIconChange = (event) => {
-  const file = event.target.files[0]
-  if (file) {
-    iconFile.value = file
-    iconPreview.value = URL.createObjectURL(file)
-  }
-}
-
 const handleRegister = async () => {
   try {
-    errorMessage.value = ''
+    errorMessage.value = '';
     
     if (password.value !== confirmPassword.value) {
-      errorMessage.value = 'パスワードが一致しません。'
-      return
+      errorMessage.value = 'パスワードが一致しません。';
+      return;
     }
+    
     // 半角英数字かつ8文字以上のバリデーション
-    const passwordRegex = /^[A-Za-z0-9]{8,}$/
+    const passwordRegex = /^[A-Za-z0-9]{8,}$/;
     if (!passwordRegex.test(password.value)) {
-      errorMessage.value = 'パスワードは半角英数字かつ8文字以上で入力してください。'
-      return
+      errorMessage.value = 'パスワードは半角英数字かつ8文字以上で入力してください。';
+      return;
     }
 
     // FormDataを使用してマルチパートフォームデータを構築
-    const formData = new FormData()
-    formData.append('username', username.value)
-    formData.append('email', email.value)
-    formData.append('password', password.value)
+    const formData = new FormData();
+    formData.append('username', username.value);
+    formData.append('email', email.value);
+    formData.append('password', password.value);
     
     // アイコン画像があれば追加
     if (iconFile.value) {
-      formData.append('icon', iconFile.value)
+      formData.append('icon', iconFile.value);
     }
     
-    const res = await fetch('http://localhost:3000/register', {
+    // 直接localhostを参照せず、環境変数のAPIエンドポイントを使用
+    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.sharechat-app.com';
+    console.log('使用するAPIエンドポイント:', apiBaseUrl);
+    
+    const res = await fetch(`${apiBaseUrl}/register`, {
       method: 'POST',
       body: formData // Content-Typeはブラウザが自動設定
-    })
+    });
     
-    const data = await res.json()
+    const data = await res.json();
     
     if (!res.ok) {
-      errorMessage.value = data.error || '登録に失敗しました'
-      return
+      errorMessage.value = data.error || '登録に失敗しました';
+      return;
     }
     
-    alert('登録が完了しました')
-    router.push('/login')
+    alert('登録が完了しました');
+    router.push('/login');
   } catch (err) {
-    console.error('登録エラー:', err)
-    errorMessage.value = 'ネットワークエラーが発生しました'
+    console.error('登録エラー:', err);
+    errorMessage.value = 'ネットワークエラーが発生しました';
   }
-}
+};
 </script>
 
 <style scoped>

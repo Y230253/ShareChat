@@ -1,19 +1,35 @@
 [
   {
     "origin": ["*"],
-    "method": ["GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS"],
     "responseHeader": [
-      "Content-Type", 
+      "Content-Type",
       "Content-Length", 
-      "Cache-Control", 
+      "Cache-Control",
       "Content-Language", 
+      "Content-Disposition",
       "Content-Encoding", 
       "Content-Range", 
+      "Accept",
+      "Accept-Ranges",
+      "Age",
       "Access-Control-Allow-Origin",
-      "Access-Control-Allow-Headers",
       "Access-Control-Allow-Methods",
-      "Authorization"
+      "Access-Control-Allow-Headers",
+      "Access-Control-Expose-Headers",
+      "Access-Control-Max-Age",
+      "Authorization",
+      "Date",
+      "ETag",
+      "Expires",
+      "Last-Modified",
+      "Range",
+      "Server",
+      "Transfer-Encoding",
+      "Vary",
+      "X-Goog-*",
+      "x-goog-*"
     ],
+    "method": ["GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS"],
     "maxAgeSeconds": 3600
   }
 ]

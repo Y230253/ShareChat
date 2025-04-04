@@ -8,6 +8,19 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
+    <!-- アセットの直接参照を保証するためのスクリプト -->
+    <script>
+      window.ASSET_BASE_PATH = '';
+      try {
+        // 認証URLの場合はフルパスを使用
+        if (location.href.includes('apidata.googleusercontent.com')) {
+          window.ASSET_BASE_PATH = 'https://storage.googleapis.com/sharechat-media-bucket/frontend/';
+          console.log('認証URL検出: フルパスを使用');
+        }
+      } catch (e) {
+        console.error('パス検出エラー:', e);
+      }
+    </script>
     <title>Shacha!!</title>
   </head>
   <body>

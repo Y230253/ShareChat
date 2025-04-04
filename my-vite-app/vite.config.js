@@ -4,7 +4,7 @@ import vue from '@vitejs/plugin-vue'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [vue()],
-  // 認証URLでも動作するようにベースパスを完全相対パスに設定
+  // 認証URLでも動作するよう完全に空のbase pathを使用
   base: '',
   build: {
     outDir: 'dist',
@@ -12,13 +12,13 @@ export default defineConfig({
     emptyOutDir: true,
     // ソースマップはデバッグ中のみ有効にする
     sourcemap: false,
-    // アセットのパス解決方法を調整
+    // アセットのパス解決方法を調整 - これが重要
     rollupOptions: {
       output: {
-        // チャンクのファイル名パターンを修正（ハッシュを短くする）
-        chunkFileNames: 'assets/[name].[hash:8].js',
-        entryFileNames: 'assets/[name].[hash:8].js',
-        assetFileNames: 'assets/[name].[hash:8].[ext]',
+        // ハッシュを短く、パスを単純化
+        chunkFileNames: 'assets/[name].[hash:6].js',
+        entryFileNames: 'assets/[name].[hash:6].js',
+        assetFileNames: 'assets/[name].[hash:6].[ext]',
         // マニュアルチャンクを無効化
         manualChunks: undefined
       }
