@@ -28,8 +28,17 @@ if %ERRORLEVEL% NEQ 0 (
   exit /b 1
 )
 
-echo 5. Cloud Runにデプロイ
-gcloud builds submit --tag asia-northeast1-docker.pkg.dev/%PROJECT_ID%/sharechat-repo/sharechat-backend
+echo 5. Cloud Storageの初期化
+echo バケットとデータファイルの初期設定を行います...
+set GOOGLE_CLOUD_PROJECT_ID=%PROJECT_ID%
+set GOOGLE_CLOUD_STORAGE_BUCKET=%BUCKET_NAME%
+node initialize-storage.js
+if %ERRORLEVEL% NEQ 0 (
+  echo 警告: ストレージの初期化に問題がありました。処理を続行します。
+)
+
+echo 6. Cloud Runにデプロイ
+gcloud builds submit --tag asia-northeast1-docker.pkg.dev/sharechat-455513/sharechat-repo/sharechat-backend
 if %ERRORLEVEL% NEQ 0 (
   echo エラー: イメージのビルド/アップロードに失敗しました
   echo リポジトリが作成されていることを確認してください。
@@ -37,21 +46,27 @@ if %ERRORLEVEL% NEQ 0 (
   exit /b 1
 )
 
-echo 6. サービスのデプロイ
-gcloud run deploy %SERVICE_NAME% ^
-  --image asia-northeast1-docker.pkg.dev/%PROJECT_ID%/sharechat-repo/sharechat-backend ^
-  --platform managed ^
-  --region %REGION% ^
-  --allow-unauthenticated ^
-  --set-env-vars="NODE_ENV=production,GOOGLE_CLOUD_PROJECT_ID=%PROJECT_ID%,GOOGLE_CLOUD_STORAGE_BUCKET=%BUCKET_NAME%,JWT_SECRET=sharechat_app_secret_key_1234567890"
+echo 7. サービスのデプロイ
+gcloud run deploy sharechat-backend 
+  --image asia-northeast1-docker.pkg.dev/sharechat-455513/sharechat-repo/sharechat-backend 
+  --platform managed 
+  --region asia-northeast1 
+  --allow-unauthenticated 
+  --set-env-vars="NODE_ENV=production,GOOGLE_CLOUD_PROJECT_ID=sharechat-455513,GOOGLE_CLOUD_STORAGE_BUCKET=sharechat-backend,JWT_SECRET=sharechat_app_secret_key_1234567890"
 
-echo 7. デプロイしたURLを取得
+echo 8. デプロイしたURLを取得
 for /f %%i in ('gcloud run services describe %SERVICE_NAME% --platform managed --region %REGION% --format="value(status.url)"') do set SERVICE_URL=%%i
 
-echo 8. ブラウザでサービスを開く
+echo 9. ブラウザでサービスを開く
 start "" %SERVICE_URL%
 
-echo デプロイ完了！上記のURLがバックエンドのエンドポイントです。
-echo フロントエンド環境変数(.env.production)に設定するには:
+echo 10. フロントエンド環境変数の更新
 echo VITE_API_BASE_URL=%SERVICE_URL% > ..\.env.production
-echo 環境変数ファイルを確認してください。
+echo VITE_APP_VERSION=1.0.0 >> ..\.env.production
+echo VITE_APP_BUILD_DATE=%date% >> ..\.env.production
+
+echo デプロイ完了！
+echo バックエンドURL: %SERVICE_URL%
+echo フロントエンドの環境変数を更新しました。
+echo フロントエンドを再デプロイするには:
+echo cd .. && hash-router-deploy.bat

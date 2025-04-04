@@ -15,22 +15,43 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Google Cloud Storage 設定
-const storage = new Storage({
-  projectId: process.env.GOOGLE_CLOUD_PROJECT_ID,
-  keyFilename: path.join(__dirname, 'gcp-key.json')
-});
+let storage;
+try {
+  storage = new Storage({
+    projectId: process.env.GOOGLE_CLOUD_PROJECT_ID,
+    keyFilename: path.join(__dirname, 'gcp-key.json')
+  });
+  console.log('Google Cloud Storage初期化成功');
+} catch (error) {
+  console.error('Google Cloud Storageの初期化エラー:', error);
+  // エラーが発生してもサーバー起動を続行
+}
+
 const bucketName = process.env.GOOGLE_CLOUD_STORAGE_BUCKET || 'sharechat-media-bucket';
-const bucket = storage.bucket(bucketName);
+let bucket;
+try {
+  bucket = storage.bucket(bucketName);
+  console.log(`バケット ${bucketName} にアクセス準備完了`);
+} catch (error) {
+  console.error(`バケット ${bucketName} へのアクセスエラー:`, error);
+}
 
 const app = express();
 
-// CORSの設定を修正（これが重要なポイント）
+// CORSの設定を緩和（すべてのオリジンを許可）
 app.use(cors({
-  origin: 'https://storage.googleapis.com', // '*' ではなく具体的なオリジンを指定
+  origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: false // credentialsを使用しない
 }));
+
+// 環境変数の表示（デバッグ用）
+console.log('環境変数:');
+console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('GOOGLE_CLOUD_PROJECT_ID:', process.env.GOOGLE_CLOUD_PROJECT_ID);
+console.log('GOOGLE_CLOUD_STORAGE_BUCKET:', process.env.GOOGLE_CLOUD_STORAGE_BUCKET);
+console.log('JWT_SECRET:', process.env.JWT_SECRET ? '設定済み' : '未設定');
 
 // Cloud Storage内のJSONファイルパス設定
 const dataFilePath = 'data/PhotoData.json';
@@ -39,7 +60,6 @@ const userDataFilePath = 'data/UserData.json';
 // JWT秘密鍵の環境変数から取得
 const JWT_SECRET = process.env.JWT_SECRET || 'sharechat_app_secret_key_1234567890';
 
-app.use(cors());
 app.use(express.json());
 
 // 静的ファイルを提供する設定
@@ -64,7 +84,12 @@ async function readGCSFile(filePath) {
     return JSON.parse(content.toString());
   } catch (error) {
     console.error(`Error reading file ${filePath}:`, error);
-    throw error;
+    // エラー時にもデフォルト値を返す（耐障害性向上）
+    if (filePath === userDataFilePath) {
+      return { users: [] };
+    } else {
+      return { users: [], posts: [], likes: [], bookmarks: [], comments: [], tags: [] };
+    }
   }
 }
 
@@ -79,6 +104,7 @@ async function writeGCSFile(filePath, data) {
     });
     
     console.log(`Successfully wrote to ${filePath}`);
+    return true;
   } catch (error) {
     console.error(`Error writing to file ${filePath}:`, error);
     throw error;
@@ -147,12 +173,16 @@ app.post('/upload', (req, res, next) => {
       passthroughStream.write(fileBuffer);
       passthroughStream.end();
       
-      passthroughStream.pipe(file.createWriteStream({
-        metadata: {
-          contentType: req.file.mimetype,
-        },
-        public: true,
-      }));
+      await new Promise((resolve, reject) => {
+        passthroughStream.pipe(file.createWriteStream({
+          metadata: {
+            contentType: req.file.mimetype,
+          },
+          public: true,
+        }))
+        .on('finish', resolve)
+        .on('error', reject);
+      });
       
       // 公開URL生成
       const publicUrl = `https://storage.googleapis.com/${bucketName}/${filePath}`;
@@ -166,7 +196,7 @@ app.post('/upload', (req, res, next) => {
       });
     } catch (error) {
       console.error('ファイルアップロードエラー:', error);
-      res.status(500).json({ error: 'ファイルのアップロードに失敗しました' });
+      res.status(500).json({ error: 'ファイルのアップロードに失敗しました: ' + error.message });
     }
   });
 });
@@ -204,48 +234,55 @@ function authenticateToken(req, res, next) {
   })
 }
 
-// 🔹 ユーザー登録 API - アイコンアップロード対応に修正
+// 🔹 ユーザー登録 API - エラーハンドリング強化
 app.post('/register', upload.single('icon'), async (req, res) => {
-  const { username, email, password } = req.body;
-  if (!username || !email || !password) {
-    return res.status(400).json({ error: '全てのフィールドが必要です' });
-  }
-
-  const userData = await readUserData();
-
-  // 同じメールアドレスがないか重複チェック
-  if (userData.users.some(user => user.email === email)) {
-    return res.status(400).json({ error: '既に登録されています' });
-  }
-
+  console.log('登録処理開始:', req.body);
+  
   try {
+    const { username, email, password } = req.body;
+    if (!username || !email || !password) {
+      return res.status(400).json({ error: '全てのフィールドが必要です' });
+    }
+
+    const userData = await readUserData();
+
+    // 同じメールアドレスがないか重複チェック
+    if (userData.users.some(user => user.email === email)) {
+      return res.status(400).json({ error: '既に登録されています' });
+    }
+
     // パスワードのハッシュ化
     const hashedPassword = await bcrypt.hash(password, 10);
     
     // アイコン画像のURL処理
     let iconUrl = null;
     if (req.file) {
-      // Cloud Storageにアップロード
-      const fileName = `${Date.now()}-${req.file.originalname.replace(/\s+/g, '-')}`;
-      const filePath = `uploads/${fileName}`;
-      const file = bucket.file(filePath);
-      
-      const passthroughStream = new stream.PassThrough();
-      passthroughStream.write(req.file.buffer);
-      passthroughStream.end();
-      
-      await new Promise((resolve, reject) => {
-        passthroughStream.pipe(file.createWriteStream({
-          metadata: {
-            contentType: req.file.mimetype,
-          },
-          public: true,
-        }))
-        .on('finish', resolve)
-        .on('error', reject);
-      });
-      
-      iconUrl = `https://storage.googleapis.com/${bucketName}/${filePath}`;
+      try {
+        // Cloud Storageにアップロード
+        const fileName = `${Date.now()}-${req.file.originalname.replace(/\s+/g, '-')}`;
+        const filePath = `uploads/${fileName}`;
+        const file = bucket.file(filePath);
+        
+        const passthroughStream = new stream.PassThrough();
+        passthroughStream.write(req.file.buffer);
+        passthroughStream.end();
+        
+        await new Promise((resolve, reject) => {
+          passthroughStream.pipe(file.createWriteStream({
+            metadata: {
+              contentType: req.file.mimetype,
+            },
+            public: true,
+          }))
+          .on('finish', resolve)
+          .on('error', reject);
+        });
+        
+        iconUrl = `https://storage.googleapis.com/${bucketName}/${filePath}`;
+      } catch (uploadError) {
+        console.error('アイコンアップロードエラー:', uploadError);
+        // アイコンアップロードに失敗しても処理は続行
+      }
     }
     
     const newUser = {
@@ -260,7 +297,7 @@ app.post('/register', upload.single('icon'), async (req, res) => {
     return res.status(201).json({ message: '登録成功' });
   } catch (error) {
     console.error('登録エラー:', error);
-    return res.status(500).json({ error: 'サーバーエラーが発生しました' });
+    return res.status(500).json({ error: 'サーバーエラーが発生しました: ' + error.message });
   }
 });
 
@@ -344,9 +381,13 @@ app.post('/posts', authenticateToken, async (req, res) => {
   }
 });
 
-// server.js に追加
+// ルートエンドポイント - ヘルスチェック用
 app.get('/', (req, res) => {
-  res.json({ message: "ShareChat API Server is running" });
+  res.json({ 
+    message: "ShareChat API Server is running",
+    version: "1.0",
+    timestamp: new Date().toISOString()
+  });
 });
 
 // ヘルスチェックエンドポイント
@@ -371,13 +412,65 @@ app.get('/api/users', async (req, res) => {
   }
 });
 
-// 投稿一覧取得API
+// 投稿一覧取得API - 両方のエンドポイントで対応
 app.get('/api/photos', async (req, res) => {
   try {
     const data = await readData();
     res.json(data.posts);
   } catch (err) {
     console.error('投稿一覧取得エラー:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+// 追加: フロントエンドと一致させるためのパス
+app.get('/posts', async (req, res) => {
+  try {
+    const data = await readData();
+    res.json(data.posts);
+  } catch (err) {
+    console.error('投稿一覧取得エラー:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+// 追加: ログインエンドポイント
+app.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: 'メールアドレスとパスワードが必要です' });
+    }
+
+    const userData = await readUserData();
+    const user = userData.users.find(u => u.email === email);
+
+    if (!user) {
+      return res.status(401).json({ error: 'メールアドレスまたはパスワードが正しくありません' });
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: 'メールアドレスまたはパスワードが正しくありません' });
+    }
+
+    // JWTトークンの生成
+    const token = jwt.sign(
+      { id: user.id, email: user.email, username: user.username },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    // ユーザー情報からパスワードを除外
+    const { password: _, ...userWithoutPassword } = user;
+
+    res.json({
+      message: 'ログイン成功',
+      token,
+      user: userWithoutPassword
+    });
+  } catch (error) {
+    console.error('ログインエラー:', error);
     res.status(500).json({ error: 'サーバーエラーが発生しました' });
   }
 });
@@ -396,11 +489,22 @@ app.get('*', (req, res) => {
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`環境: ${process.env.NODE_ENV || 'development'}`);
   
   try {
+    // バケットアクセス確認
+    if (!bucket) {
+      console.error('警告: バケットオブジェクトが初期化されていません');
+      return;
+    }
+
+    console.log('Cloud Storageバケットのアクセス確認中...');
+    
     // Cloud Storageに初期データファイルが存在するか確認
     const [dataFileExists] = await bucket.file(dataFilePath).exists();
     const [userDataFileExists] = await bucket.file(userDataFilePath).exists();
+    
+    console.log(`データファイルの存在確認: PhotoData.json=${dataFileExists}, UserData.json=${userDataFileExists}`);
     
     // データファイルがない場合は初期データを作成
     if (!dataFileExists) {
@@ -416,5 +520,6 @@ app.listen(PORT, async () => {
     console.log('データファイル確認完了、サーバー起動準備完了');
   } catch (err) {
     console.error('データ構造確認エラー:', err);
+    console.error('警告: データファイルの初期化に失敗しましたが、サーバーは起動します');
   }
 });
