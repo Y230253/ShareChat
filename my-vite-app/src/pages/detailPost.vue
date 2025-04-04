@@ -152,7 +152,7 @@ import { useRoute, useRouter } from 'vue-router';
 import Header from '../components/header.vue';
 import Sidebar from '../components/Sidebar.vue';
 import authStore from '../authStore.js';
-import { apiCall } from '../services/api.js'; // APIサービスをインポート
+import { apiCall } from '../services/api.js';
 
 const route = useRoute();
 const router = useRouter();
@@ -177,8 +177,8 @@ const comments = ref([]);
 const newComment = ref('');
 const commentCount = ref(0);
 
-// APIベースURL
-const apiUrl = 'http://localhost:3000';
+// APIベースURLをimport.meta.envから取得
+const apiUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.sharechat-app.com';
 
 // ユーザー情報
 const isLoggedIn = computed(() => authStore.isLoggedIn.value);
@@ -200,13 +200,8 @@ const fetchPostDetail = async () => {
   error.value = null;
   
   try {
-    // 全ての投稿を取得してIDでフィルタリング
-    const res = await fetch(`${apiUrl}/posts`);
-    if (!res.ok) {
-      throw new Error('投稿の取得に失敗しました');
-    }
-    
-    const posts = await res.json();
+    // APIサービスを使用して投稿を取得
+    const posts = await apiCall('/posts');
     const foundPost = posts.find(p => p.id === postId.value);
     
     if (!foundPost) {
@@ -217,7 +212,7 @@ const fetchPostDetail = async () => {
     likeCount.value = foundPost.likeCount || 0;
     bookmarkCount.value = foundPost.bookmarkCount || 0;
     
-    // コメント取得（APIがあれば）
+    // コメント取得
     fetchComments();
     
     // いいね・ブックマーク状態の確認
@@ -233,18 +228,13 @@ const fetchPostDetail = async () => {
   }
 };
 
-// コメント取得 - エラーハンドリングを強化
+// コメント取得 - APIサービスを使用
 const fetchComments = async () => {
   try {
     console.log(`コメント取得中: post_id=${postId.value}`);
-    const res = await fetch(`${apiUrl}/comments/${postId.value}`);
+    const commentsData = await apiCall(`/comments/${postId.value}`);
     
-    if (!res.ok) {
-      console.error('コメント取得失敗:', await res.text());
-      return;
-    }
-    
-    comments.value = await res.json();
+    comments.value = commentsData;
     console.log('コメント取得成功:', comments.value);
     commentCount.value = comments.value.length;
   } catch (err) {
@@ -254,27 +244,14 @@ const fetchComments = async () => {
 
 // いいね・ブックマーク状態の確認
 const checkUserInteractions = async () => {
-  const token = localStorage.getItem('token');
-  if (!token) return;
-  
   try {
     // いいねチェック
-    const likesRes = await fetch(`${apiUrl}/check-like/${postId.value}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    if (likesRes.ok) {
-      const likesData = await likesRes.json();
-      liked.value = likesData.liked;
-    }
+    const likesData = await apiCall(`/check-like/${postId.value}`);
+    liked.value = likesData.liked;
     
     // ブックマークチェック
-    const bookmarksRes = await fetch(`${apiUrl}/check-bookmark/${postId.value}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    if (bookmarksRes.ok) {
-      const bookmarksData = await bookmarksRes.json();
-      isBookmarked.value = bookmarksData.bookmarked;
-    }
+    const bookmarksData = await apiCall(`/check-bookmark/${postId.value}`);
+    isBookmarked.value = bookmarksData.bookmarked;
   } catch (err) {
     console.error('状態チェックエラー:', err);
   }
@@ -287,38 +264,25 @@ const toggleLike = async () => {
     return;
   }
   
-  const token = localStorage.getItem('token');
-  if (!token) return;
-  
   try {
     if (liked.value) {
       // いいね解除
-      const response = await fetch(`${apiUrl}/likes`, {
+      await apiCall('/likes', {
         method: 'DELETE',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ post_id: postId.value })
+        body: { post_id: postId.value }
       });
-      if (response.ok) {
-        liked.value = false;
-        likeCount.value = Math.max(likeCount.value - 1, 0);
-      }
+      
+      liked.value = false;
+      likeCount.value = Math.max(likeCount.value - 1, 0);
     } else {
       // いいね追加
-      const response = await fetch(`${apiUrl}/likes`, {
+      await apiCall('/likes', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ post_id: postId.value })
+        body: { post_id: postId.value }
       });
-      if (response.ok) {
-        liked.value = true;
-        likeCount.value++;
-      }
+      
+      liked.value = true;
+      likeCount.value++;
     }
   } catch (err) {
     console.error('いいね処理エラー:', err);

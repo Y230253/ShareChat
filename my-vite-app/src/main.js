@@ -1,28 +1,65 @@
 import { createApp } from 'vue'
-import './style.css'
+import { createRouter, createWebHistory } from 'vue-router'
 import App from './App.vue'
-import router from './router'
-import authStore from './authStore'
-import ApiPlugin from './plugins/api-plugin' // APIプラグインをインポート
+import authStore from './authStore.js'
 
-// 環境変数デバッグ
-console.log('Current API URL:', import.meta.env.VITE_API_BASE_URL);
-console.log('Current ENV:', import.meta.env.MODE);
+// コンポーネントのインポート
+import HomePage from './pages/Home.vue'
+import LoginPage from './pages/Login.vue'
+import PostFormPage from './pages/PostForm.vue'
+import DetailPostPage from './pages/detailPost.vue'
+import FavoritePage from './pages/Favorite.vue'
+import TagsPage from './pages/Tags.vue'
+import UserPage from './pages/User.vue'
+// 必要に応じて他のコンポーネントをインポート
 
-// キャッシュバスティング用のコード
-console.log('App initializing with build timestamp:', new Date().toISOString())
+// ルート定義
+const routes = [
+  { path: '/', component: HomePage },
+  { path: '/login', component: LoginPage },
+  { path: '/posts', component: PostFormPage },
+  { path: '/detail/:id', component: DetailPostPage },
+  { path: '/favorite', component: FavoritePage },
+  { path: '/tags', component: TagsPage },
+  { path: '/user/:id', component: UserPage },
+  // 他のルートを追加
+]
 
-// シンプルなログのみ出力するフック
-router.beforeEach((to, from, next) => {
-  console.log(`Route change: ${from.path} -> ${to.path}`)
-  next()
+// ルーターの作成
+const router = createRouter({
+  history: createWebHistory(),
+  routes,
 })
 
-// アプリケーション起動時に認証情報を初期化
-authStore.initAuth()
+// 認証前処理 - ルート変更のデバッグ
+router.beforeEach((to, from, next) => {
+  console.log(`Route change: ${from.path} -> ${to.path}`);
+  next();
+});
 
-const app = createApp(App)
-app.use(router)
-app.use(ApiPlugin) // APIプラグインを使用
-app.mount('#app')
+// アプリケーション初期化
+console.log('App initializing...');
+
+// 環境情報ログ出力
+console.log(`Current API URL: ${import.meta.env.VITE_API_BASE_URL}`);
+console.log(`Current ENV: ${import.meta.env.MODE}`);
+console.log(`App initializing with build timestamp: ${new Date().toISOString()}`);
+console.log(`API Plugin initialized with base URL: ${import.meta.env.VITE_API_BASE_URL}`);
+
+// 認証情報の初期化
+authStore.initAuth();
+console.log('認証状態:', authStore.isLoggedIn.value ? 'ログイン済み' : '未ログイン');
+
+// アプリ作成とマウント
+const app = createApp(App);
+app.use(router);
+app.mount('#app');
+
+// デバッグ用グローバル変数
+if (import.meta.env.DEV) {
+  window.authStore = authStore;
+}
+
+// 初期化完了
+console.log('App initialization complete!');
 

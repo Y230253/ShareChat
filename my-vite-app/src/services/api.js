@@ -1,9 +1,9 @@
-// APIサービスの設定 - credentials属性を完全に排除
+// APIサービスの設定 - デバッグ機能強化
 
 // 環境に応じたベースURLを設定
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.sharechat-app.com';
 
-// APIリクエストの共通設定 - シンプルに
+// APIリクエストの共通設定
 const commonHeaders = {
   'Content-Type': 'application/json',
   'Accept': 'application/json',
@@ -15,7 +15,7 @@ function getAuthHeader() {
   return token ? { 'Authorization': `Bearer ${token}` } : {};
 }
 
-// シンプル化したAPI呼び出し関数
+// API呼び出し関数
 export async function apiCall(endpoint, options = {}) {
   const url = `${API_BASE_URL}${endpoint}`;
   
@@ -29,7 +29,7 @@ export async function apiCall(endpoint, options = {}) {
     }
   };
 
-  // ボディがある場合は文字列化が必要かチェック
+  // ボディ処理の改善
   if (options.body) {
     if (typeof options.body === 'string') {
       fetchOptions.body = options.body;
@@ -38,16 +38,35 @@ export async function apiCall(endpoint, options = {}) {
     }
   }
 
-  console.log(`API呼び出し: ${url}`, fetchOptions);
+  // デバッグ情報
+  console.log(`API呼び出し: ${url}`, {...fetchOptions, body: options.body ? '(データあり)' : undefined});
   
   try {
     const response = await fetch(url, fetchOptions);
     
+    // ステータスコード表示の追加
+    console.log(`API応答: ${url} - ステータス: ${response.status}`);
+    
     if (!response.ok) {
-      throw new Error(`API Error: ${response.status} ${response.statusText}`);
+      // エラーレスポンスのデバッグ
+      let errorDetails;
+      try {
+        errorDetails = await response.json();
+      } catch (e) {
+        errorDetails = { error: await response.text() };
+      }
+      
+      console.error(`API エラーレスポンス:`, errorDetails);
+      throw new Error(`API Error: ${response.status} - ${errorDetails.error || response.statusText}`);
     }
     
-    return await response.json();
+    const data = await response.json();
+    
+    // 短いデバッグ出力
+    console.log(`API成功: ${url} - データ:`, 
+      typeof data === 'object' ? `(${Array.isArray(data) ? data.length + 'アイテム' : 'オブジェクト'})` : data);
+    
+    return data;
   } catch (error) {
     console.error(`API呼び出しエラー: ${error.message}`);
     throw error;
@@ -94,11 +113,11 @@ export const api = {
   auth: {
     login: (credentials) => apiCall('/auth/login', { 
       method: 'POST', 
-      body: JSON.stringify(credentials) 
+      body: credentials  // 自動的にJSONに変換
     }),
     register: (userData) => apiCall('/auth/register', { 
       method: 'POST', 
-      body: JSON.stringify(userData) 
+      body: userData  // 自動的にJSONに変換
     }),
     logout: () => apiCall('/auth/logout', { 
       method: 'POST' 
