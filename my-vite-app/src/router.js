@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
 import Home from '../src/pages/Home.vue'
 import Favorite from '../src/pages/Favorite.vue'
 import PostForm from '../src/pages/PostForm.vue'
@@ -54,8 +54,9 @@ const routes = [
 ]
 
 const router = createRouter({
-  // 認証URLでも動作するようにベースパスを相対パスに
-  history: createWebHistory('./'),
+  // HTML5履歴モードからハッシュ履歴モードに変更
+  // これによりページリロード時の認証エラーが解消されます
+  history: createWebHashHistory(),
   routes,
 })
 
