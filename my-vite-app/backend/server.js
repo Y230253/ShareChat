@@ -68,6 +68,7 @@ app.use(express.static(path.join(__dirname, '../dist')));
 // ファイル読み書き用ヘルパー関数 - Cloud Storage対応
 async function readGCSFile(filePath) {
   try {
+    console.log(`GCSファイル読み込み開始: ${filePath}`);
     const file = bucket.file(filePath);
     const [exists] = await file.exists();
     
@@ -80,8 +81,29 @@ async function readGCSFile(filePath) {
       }
     }
     
+    console.log(`ファイル ${filePath} が存在します、ダウンロード中...`);
     const [content] = await file.download();
-    return JSON.parse(content.toString());
+    const contentStr = content.toString();
+    console.log(`ファイル内容長: ${contentStr.length}文字`);
+    
+    try {
+      const parsedData = JSON.parse(contentStr);
+      console.log(`データパース成功: ${filePath}`);
+      
+      // ユーザーデータの場合、追加情報を表示
+      if (filePath === userDataFilePath && parsedData.users) {
+        console.log(`ユーザー数: ${parsedData.users.length}`);
+        if (parsedData.users.length > 0) {
+          console.log(`最初のユーザー: ID=${parsedData.users[0].id}, 名前=${parsedData.users[0].username}`);
+        }
+      }
+      
+      return parsedData;
+    } catch (parseError) {
+      console.error(`JSONのパースエラー: ${filePath}`, parseError);
+      console.log(`内容の冒頭: ${contentStr.substring(0, 100)}...`);
+      throw parseError;
+    }
   } catch (error) {
     console.error(`Error reading file ${filePath}:`, error);
     // エラー時にもデフォルト値を返す（耐障害性向上）
@@ -234,6 +256,171 @@ function authenticateToken(req, res, next) {
   })
 }
 
+// 認証関連のロジック - 共通関数として抽出
+async function handleLogin(req, res) {
+  try {
+    console.log('ログイン処理開始...');
+    const { email, password } = req.body;
+    console.log(`リクエスト内容: email=${email}, password=${password ? '******' : 'なし'}`);
+    
+    if (!email || !password) {
+      console.log('必須フィールドが不足しています');
+      return res.status(400).json({ error: 'メールアドレスとパスワードが必要です' });
+    }
+
+    console.log(`ログイン試行: ${email}`);
+    const userData = await readUserData();
+    console.log(`ユーザーデータ取得完了: ${userData.users?.length || 0}件のユーザー`);
+    
+    const user = userData.users.find(u => u.email === email);
+
+    if (!user) {
+      console.log(`ユーザーが見つかりません: ${email}`);
+      return res.status(401).json({ error: 'メールアドレスまたはパスワードが正しくありません' });
+    }
+    
+    console.log(`ユーザー認証: ID=${user.id}, Email=${user.email}, HashedPassword: ${user.password ? '***存在します***' : '存在しません'}`);
+
+    // bcrypt.compareを使用してプレーンテキストのパスワードとハッシュ化されたパスワードを比較
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    console.log(`パスワード検証結果: ${isPasswordValid ? '一致' : '不一致'}`);
+    
+    if (!isPasswordValid) {
+      console.log(`パスワードが一致しません: ${email}`);
+      return res.status(401).json({ error: 'メールアドレスまたはパスワードが正しくありません' });
+    }
+
+    // JWTトークンの生成
+    const token = jwt.sign(
+      { id: user.id, email: user.email, username: user.username },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    // ユーザー情報からパスワードを除外
+    const { password: _, ...userWithoutPassword } = user;
+
+    console.log(`ログイン成功: ${email}, ユーザーID: ${user.id}`);
+    res.json({
+      message: 'ログイン成功',
+      token,
+      user: userWithoutPassword
+    });
+  } catch (error) {
+    console.error('ログインエラー:', error);
+    res.status(500).json({ error: 'サーバーエラーが発生しました: ' + error.message });
+  }
+}
+
+async function handleRegister(req, res) {
+  console.log('登録処理開始:', req.body);
+  
+  try {
+    const { username, email, password } = req.body;
+    if (!username || !email || !password) {
+      return res.status(400).json({ error: '全てのフィールドが必要です' });
+    }
+
+    const userData = await readUserData();
+
+    // 同じメールアドレスがないか重複チェック
+    if (userData.users.some(user => user.email === email)) {
+      return res.status(400).json({ error: '既に登録されています' });
+    }
+
+    // パスワードのハッシュ化
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    // アイコン画像のURL処理
+    let iconUrl = null;
+    if (req.file) {
+      try {
+        // Cloud Storageにアップロード
+        const fileName = `${Date.now()}-${req.file.originalname.replace(/\s+/g, '-')}`;
+        const filePath = `uploads/${fileName}`;
+        const file = bucket.file(filePath);
+        
+        const passthroughStream = new stream.PassThrough();
+        passthroughStream.write(req.file.buffer);
+        passthroughStream.end();
+        
+        await new Promise((resolve, reject) => {
+          passthroughStream.pipe(file.createWriteStream({
+            metadata: {
+              contentType: req.file.mimetype,
+            },
+            public: true,
+          }))
+          .on('finish', resolve)
+          .on('error', reject);
+        });
+        
+        iconUrl = `https://storage.googleapis.com/${bucketName}/${filePath}`;
+      } catch (uploadError) {
+        console.error('アイコンアップロードエラー:', uploadError);
+        // アイコンアップロードに失敗しても処理は続行
+      }
+    }
+    
+    const newUser = {
+      id: userData.users.length ? userData.users[userData.users.length - 1].id + 1 : 1,
+      username,
+      email,
+      password: hashedPassword,
+      icon_url: iconUrl
+    };
+    userData.users.push(newUser);
+    await writeUserData(userData);
+    console.log(`ユーザー登録成功: ${email}, ID: ${newUser.id}`);
+    return res.status(201).json({ message: '登録成功' });
+  } catch (error) {
+    console.error('登録エラー:', error);
+    return res.status(500).json({ error: 'サーバーエラーが発生しました: ' + error.message });
+  }
+}
+
+// 既存のログインエンドポイント
+app.post('/login', handleLogin);
+
+// 追加: /auth/login エンドポイント (フロントエンドとの互換性のため)
+app.post('/auth/login', (req, res) => {
+  console.log('認証ルート /auth/login が呼び出されました');
+  handleLogin(req, res);
+});
+
+// 🔹 ユーザー登録 API - リファクタリング
+app.post('/register', upload.single('icon'), (req, res) => {
+  handleRegister(req, res);
+});
+
+// 追加: /auth/register エンドポイント (フロントエンドとの互換性のため)
+app.post('/auth/register', upload.single('icon'), (req, res) => {
+  console.log('認証ルート /auth/register が呼び出されました');
+  handleRegister(req, res);
+});
+
+// 追加: /auth/me エンドポイント (ユーザー情報取得)
+app.get('/auth/me', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    console.log(`ユーザー情報取得: ID=${userId}`);
+    
+    const userData = await readUserData();
+    const user = userData.users.find(u => u.id === userId);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'ユーザーが見つかりません' });
+    }
+    
+    // パスワードを除外したユーザー情報を返す
+    const { password, ...userWithoutPassword } = user;
+    res.json(userWithoutPassword);
+  } catch (error) {
+    console.error('ユーザー情報取得エラー:', error);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+}
+);
 // 🔹 ユーザー登録 API - エラーハンドリング強化
 app.post('/register', upload.single('icon'), async (req, res) => {
   console.log('登録処理開始:', req.body);
@@ -392,7 +579,15 @@ app.get('/', (req, res) => {
 
 // ヘルスチェックエンドポイント
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', message: "ShareChat API Health Check OK" });
+  res.json({ 
+    status: 'ok', 
+    message: "ShareChat API Health Check OK",
+    env: {
+      NODE_ENV: process.env.NODE_ENV,
+      GOOGLE_CLOUD_PROJECT_ID: process.env.GOOGLE_CLOUD_PROJECT_ID,
+      BUCKET: process.env.GOOGLE_CLOUD_STORAGE_BUCKET
+    }
+  });
 });
 
 // ユーザー一覧取得API
@@ -434,44 +629,38 @@ app.get('/posts', async (req, res) => {
   }
 });
 
-// 追加: ログインエンドポイント
-app.post('/login', async (req, res) => {
+// データ確認エンドポイント (開発/デバッグ用)
+app.get('/api/debug/users', async (req, res) => {
   try {
-    const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ error: 'メールアドレスとパスワードが必要です' });
-    }
+    const userData = await readGCSFile(userDataFilePath);
+    // 機密情報を除外
+    const safeUserData = {
+      count: userData.users?.length || 0,
+      users: (userData.users || []).map(user => ({
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        icon_url: user.icon_url,
+        has_password: !!user.password
+      }))
+    };
+    res.json(safeUserData);
+  } catch (err) {
+    res.status(500).json({ error: 'ユーザーデータ取得エラー: ' + err.message });
+  }
+});
 
-    const userData = await readUserData();
-    const user = userData.users.find(u => u.email === email);
-
-    if (!user) {
-      return res.status(401).json({ error: 'メールアドレスまたはパスワードが正しくありません' });
-    }
-
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({ error: 'メールアドレスまたはパスワードが正しくありません' });
-    }
-
-    // JWTトークンの生成
-    const token = jwt.sign(
-      { id: user.id, email: user.email, username: user.username },
-      JWT_SECRET,
-      { expiresIn: '24h' }
-    );
-
-    // ユーザー情報からパスワードを除外
-    const { password: _, ...userWithoutPassword } = user;
-
+// テスト用エンドポイント - ハッシュ化されたパスワードを生成
+app.get('/api/debug/generate-password/:password', async (req, res) => {
+  try {
+    const password = req.params.password;
+    const hashedPassword = await bcrypt.hash(password, 10);
     res.json({
-      message: 'ログイン成功',
-      token,
-      user: userWithoutPassword
+      original: password,
+      hashed: hashedPassword
     });
-  } catch (error) {
-    console.error('ログインエラー:', error);
-    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  } catch (err) {
+    res.status(500).json({ error: 'パスワードハッシュ生成エラー: ' + err.message });
   }
 });
 
@@ -490,6 +679,15 @@ const PORT = process.env.PORT || 8080;
 app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`環境: ${process.env.NODE_ENV || 'development'}`);
+  console.log('利用可能なエンドポイント:');
+  console.log('- 認証関連:');
+  console.log('  POST /login, POST /auth/login: ログイン');
+  console.log('  POST /register, POST /auth/register: ユーザー登録');
+  console.log('  GET /auth/me: 現在のユーザー情報取得');
+  console.log('- 投稿関連:');
+  console.log('  GET /posts, GET /api/photos: 投稿一覧取得');
+  console.log('  POST /posts: 新規投稿');
+  console.log('  POST /upload: メディアアップロード');
   
   try {
     // バケットアクセス確認
