@@ -52,7 +52,7 @@ gcloud run deploy sharechat-backend
   --platform managed 
   --region asia-northeast1 
   --allow-unauthenticated 
-  --set-env-vars="NODE_ENV=production,GOOGLE_CLOUD_PROJECT_ID=sharechat-455513,GOOGLE_CLOUD_STORAGE_BUCKET=sharechat-backend,JWT_SECRET=sharechat_app_secret_key_1234567890"
+  --set-env-vars="NODE_ENV=production,GOOGLE_CLOUD_PROJECT_ID=sharechat-455513,GOOGLE_CLOUD_STORAGE_BUCKET=sharechat-media-bucket,JWT_SECRET=nishichopass"
 
 echo 8. デプロイしたURLを取得
 for /f %%i in ('gcloud run services describe %SERVICE_NAME% --platform managed --region %REGION% --format="value(status.url)"') do set SERVICE_URL=%%i
