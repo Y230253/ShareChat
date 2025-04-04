@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import PhotoItem from "./PhotoItem.vue";
 import authStore from '../authStore.js';
+import { api } from '../services/api'; // APIサービスをインポート
 
 const props = defineProps({
   sidebarOpen: {
@@ -36,20 +37,11 @@ const loadPosts = async () => {
   error.value = null;
   
   try {
-    const res = await fetch('http://localhost:3000/posts');
-    if (!res.ok) {
-      throw new Error('投稿の取得に失敗しました');
-    }
-    const data = await res.json();
-    console.log('投稿取得成功:', data);
-    if (Array.isArray(data)) {
-      photos.value = data.reverse();
-    } else {
-      throw new Error('投稿データが不正です');
-    }
+    // 直接fetchの代わりにAPIサービスを使用
+    photos.value = await api.posts.getAll();
   } catch (err) {
     console.error('投稿取得エラー', err);
-    error.value = err.message;
+    error.value = '投稿の読み込みに失敗しました';
   } finally {
     isLoading.value = false;
   }

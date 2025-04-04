@@ -90,16 +90,41 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
-import Header from '../components/Header.vue'
-import Sidebar from '../components/Sidebar.vue'
+import { ref } from 'vue';
+import { useRouter } from 'vue-router';
+import { api } from '../services/api'; // APIサービスをインポート
 
-const router = useRouter()
-const username = ref('')
-const email = ref('')
-const password = ref('')
-const confirmPassword = ref('')
+const username = ref('');
+const email = ref('');
+const password = ref('');
+const confirmPassword = ref('');
+const error = ref('');
+const router = useRouter();
+
+const register = async (e) => {
+  e.preventDefault();
+  
+  if (password.value !== confirmPassword.value) {
+    error.value = 'パスワードが一致しません';
+    return;
+  }
+  
+  try {
+    // 直接fetchの代わりにAPIサービスを使用
+    await api.auth.register({
+      username: username.value,
+      email: email.value,
+      password: password.value
+    });
+    
+    console.log('登録成功！');
+    router.push('/login');
+  } catch (err) {
+    console.error('登録エラー:', err);
+    error.value = err.message || '登録に失敗しました。もう一度お試しください。';
+  }
+};
+
 const isSidebarOpen = ref(false)
 const showPassword = ref(false)
 const errorMessage = ref('')

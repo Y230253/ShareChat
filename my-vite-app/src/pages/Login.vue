@@ -4,7 +4,7 @@
     <div class="main-wrapper">
       <Sidebar :isOpen="isSidebarOpen" />
       <div class="login-container">
-        <form @submit.prevent="handleLogin" class="login-form">
+        <form @submit.prevent="login" class="login-form">
           <h1>ユーザーログイン</h1>
           <div class="form-group">
             <label for="email">メールアドレス</label>
@@ -15,7 +15,7 @@
             <input type="password" id="password" v-model="password" required>
           </div>
           <button type="submit" class="submit-btn">ログイン</button>
-          <p v-if="errorMsg" class="error">{{ errorMsg }}</p>
+          <p v-if="error" class="error">{{ error }}</p>
         </form>
       </div>
     </div>
@@ -23,59 +23,37 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
-import authStore from '../authStore.js'
-import Header from '../components/header.vue'
-import Sidebar from '../components/Sidebar.vue'
+import { ref } from 'vue';
+import { useRouter } from 'vue-router';
+import authStore from '../authStore';
+import { api } from '../services/api'; // APIサービスをインポート
 
-const router = useRouter()
-const email = ref('')
-const password = ref('')
-const errorMsg = ref('')
-const isSidebarOpen = ref(false)
+const email = ref('');
+const password = ref('');
+const error = ref('');
+const router = useRouter();
 
-const toggleSidebar = () => {
-  isSidebarOpen.value = !isSidebarOpen.value
-}
-
-const handleLogin = async () => {
+const login = async (e) => {
+  e.preventDefault();
+  
   try {
-    console.log('ログイン試行中:', email.value)
+    // 直接fetchの代わりにAPIサービスを使用
+    const response = await api.auth.login({
+      email: email.value,
+      password: password.value
+    });
     
-    const res = await fetch('http://localhost:3000/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email.value, password: password.value })
-    })
+    // ログイン成功したらトークンを保存
+    authStore.setUser(response.user);
+    authStore.setToken(response.token);
     
-    // レスポンス処理を改善
-    const data = await res.json()
-    
-    if (!res.ok) {
-      console.error('ログイン失敗:', data)
-      errorMsg.value = data.error || 'ログインエラー'
-      return
-    }
-    
-    console.log('ログイン成功:', data)
-    
-    // トークンを保存
-    localStorage.setItem('token', data.token)
-    
-    // ユーザー情報を保存
-    if (data.user) {
-      console.log('ユーザー情報を保存:', data.user)
-      authStore.setUser(data.user)
-      router.push('/')
-    } else {
-      errorMsg.value = 'ユーザー情報が不足しています'
-    }
+    console.log('ログイン成功！');
+    router.push('/');
   } catch (err) {
-    console.error('ログイン処理エラー:', err)
-    errorMsg.value = 'ネットワークエラー: ' + err.message
+    console.error('ログインエラー:', err);
+    error.value = 'メールアドレスまたはパスワードが間違っています';
   }
-}
+};
 </script>
 
 <style scoped>

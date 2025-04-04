@@ -4,6 +4,10 @@ import App from './App.vue'
 import router from './router'
 import authStore from './authStore'
 
+// 環境変数デバッグ
+console.log('Current API URL:', import.meta.env.VITE_API_BASE_URL);
+console.log('Current ENV:', import.meta.env.MODE);
+
 // キャッシュバスティング用のコード
 console.log('App initializing with build timestamp:', new Date().toISOString())
 
