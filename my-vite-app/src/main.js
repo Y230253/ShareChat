@@ -10,8 +10,7 @@ import PostFormPage from './pages/PostForm.vue'
 import DetailPostPage from './pages/detailPost.vue'
 import FavoritePage from './pages/Favorite.vue'
 import TagsPage from './pages/Tags.vue'
-import UserPage from './pages/User.vue'
-// 必要に応じて他のコンポーネントをインポート
+// User.vueは存在しないため削除
 
 // ルート定義
 const routes = [
@@ -21,8 +20,7 @@ const routes = [
   { path: '/detail/:id', component: DetailPostPage },
   { path: '/favorite', component: FavoritePage },
   { path: '/tags', component: TagsPage },
-  { path: '/user/:id', component: UserPage },
-  // 他のルートを追加
+  // User.vueへのルートも削除
 ]
 
 // ルーターの作成

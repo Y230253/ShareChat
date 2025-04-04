@@ -185,7 +185,6 @@ const handleSubmit = async () => {
       // ログイン処理
       console.log('ログイン試行中...', formData.email);
       
-      // APIを使ってログインリクエスト
       try {
         const response = await apiCall('/auth/login', {
           method: 'POST',
@@ -198,15 +197,26 @@ const handleSubmit = async () => {
         console.log('ログイン応答:', response);
         debugInfo.value = JSON.stringify(response, null, 2);
         
-        // 新しいauthStore.handleLoginResponse関数を使用
-        if (authStore.handleLoginResponse(response)) {
+        // 直接localStorage操作で問題を解決
+        if (response && response.token) {
+          // トークンとユーザー情報を保存
+          localStorage.setItem('token', response.token);
+          
+          if (response.user) {
+            localStorage.setItem('user', JSON.stringify(response.user));
+          }
+          
+          // authStoreを手動で更新
+          authStore.initAuth();
+          
           console.log('ログイン成功、リダイレクト準備中');
           // ログイン成功後にホームページへリダイレクト
           setTimeout(() => {
             router.push('/');
           }, 500);
         } else {
-          errorMessage.value = "ログイン処理に失敗しました";
+          errorMessage.value = "ログイン応答にトークンがありません";
+          console.error('不正なログイン応答:', response);
         }
       } catch (err) {
         console.error('ログインエラー:', err);

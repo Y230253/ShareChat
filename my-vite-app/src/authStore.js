@@ -7,15 +7,25 @@ const token = ref('');
 
 // 初期化時にlocalStorageからユーザー情報を取得
 function initAuth() {
+  console.log('認証情報の初期化を開始...');
+  
   const storedToken = localStorage.getItem('token');
   const userData = localStorage.getItem('user');
   
-  if (storedToken && userData) {
+  if (storedToken) {
+    console.log('トークンが見つかりました');
+    
     try {
       token.value = storedToken;
-      user.value = JSON.parse(userData);
+      
+      if (userData) {
+        user.value = JSON.parse(userData);
+        console.log('ユーザーデータを復元しました:', user.value.username || 'unknown');
+      } else {
+        console.warn('トークンは存在しますが、ユーザーデータがありません');
+      }
+      
       isLoggedIn.value = true;
-      console.log('認証情報を復元しました:', user.value.username);
       
       // トークン検証（簡易）
       const tokenParts = storedToken.split('.');
@@ -42,6 +52,9 @@ function initAuth() {
       console.error('認証情報の復元に失敗:', err);
       clearUser();
     }
+  } else {
+    console.log('認証トークンが見つかりません');
+    clearUser();
   }
 }
 

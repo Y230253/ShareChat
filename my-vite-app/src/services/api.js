@@ -50,14 +50,27 @@ export async function apiCall(endpoint, options = {}) {
     if (!response.ok) {
       // エラーレスポンスのデバッグ
       let errorDetails;
+      let errorText = '';
+      
       try {
         errorDetails = await response.json();
+        errorText = errorDetails.error || errorDetails.message || '';
       } catch (e) {
-        errorDetails = { error: await response.text() };
+        try {
+          errorText = await response.text();
+        } catch (textError) {
+          errorText = '応答の読み取りに失敗';
+        }
       }
       
-      console.error(`API エラーレスポンス:`, errorDetails);
-      throw new Error(`API Error: ${response.status} - ${errorDetails.error || response.statusText}`);
+      console.error(`API エラー (${response.status}):`, errorText || response.statusText);
+      
+      // 404の場合は特定のエラーメッセージ
+      if (response.status === 404) {
+        throw new Error(`API エンドポイントが見つかりません: ${endpoint}`);
+      }
+      
+      throw new Error(`API Error: ${response.status} - ${errorText || response.statusText}`);
     }
     
     const data = await response.json();
