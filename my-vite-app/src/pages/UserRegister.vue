@@ -158,7 +158,7 @@ const handleRegister = async () => {
     
     const res = await fetch(`${apiBaseUrl}/register`, {
       method: 'POST',
-      body: formData // Content-Typeはブラウザが自動設定
+      body: formData
     });
     
     const data = await res.json();

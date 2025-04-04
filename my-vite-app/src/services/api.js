@@ -3,20 +3,33 @@
 // 環境に応じたベースURLを設定
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.sharechat-app.com';
 
-// APIリクエストの共通設定 - credentials設定を修正
+// APIリクエストの共通設定
 const fetchConfig = {
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
-  },
-  // credentials: 'include' を削除 - これがCORS問題を引き起こしている
-  // 認証ヘッダーはAuthorizationで対応
+  }
+  // credentials設定を完全に削除
 };
 
 // API呼び出し関数
 export async function apiCall(endpoint, options = {}) {
   const url = `${API_BASE_URL}${endpoint}`;
-  const config = { ...fetchConfig, ...options };
+  
+  // 新しい設定オブジェクトを作成（元のオブジェクトを変更しない）
+  const config = { 
+    ...fetchConfig,
+    ...options,
+    headers: {
+      ...fetchConfig.headers,
+      ...(options.headers || {})
+    }
+  };
+  
+  // credentialsプロパティが残っていたら削除
+  if ('credentials' in config) {
+    delete config.credentials;
+  }
   
   // 認証トークンがあれば追加
   const token = localStorage.getItem('token');
