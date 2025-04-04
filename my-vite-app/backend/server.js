@@ -301,10 +301,14 @@ async function handleLogin(req, res) {
     const { password: _, ...userWithoutPassword } = user;
 
     console.log(`ログイン成功: ${email}, ユーザーID: ${user.id}`);
+    
+    // フロントエンドが期待するレスポンス形式に合わせる
+    // 注意: トークンをトップレベルで提供し、ユーザー情報を含める
     res.json({
-      message: 'ログイン成功',
-      token,
-      user: userWithoutPassword
+      success: true,
+      token: token,
+      user: userWithoutPassword,
+      message: 'ログイン成功'
     });
   } catch (error) {
     console.error('ログインエラー:', error);
@@ -661,6 +665,48 @@ app.get('/api/debug/generate-password/:password', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: 'パスワードハッシュ生成エラー: ' + err.message });
+  }
+});
+
+// テスト用エンドポイント - フロントエンドのログイン状態確認用
+app.get('/api/debug/auth-test', authenticateToken, (req, res) => {
+  res.json({
+    authenticated: true,
+    user: req.user,
+    message: '認証済みユーザーです'
+  });
+});
+
+// テスト用エンドポイント - フロントエンド開発用のモックトークン生成
+app.get('/api/debug/mock-token/:userId', async (req, res) => {
+  try {
+    const userId = parseInt(req.params.userId, 10);
+    if (isNaN(userId)) {
+      return res.status(400).json({ error: '有効なユーザーIDを指定してください' });
+    }
+    
+    const userData = await readUserData();
+    const user = userData.users.find(u => u.id === userId);
+    
+    if (!user) {
+      return res.status(404).json({ error: `ID ${userId} のユーザーが見つかりません` });
+    }
+    
+    const token = jwt.sign(
+      { id: user.id, email: user.email, username: user.username },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+    
+    // パスワードを除外したユーザー情報を返す
+    const { password, ...userInfo } = user;
+    
+    res.json({
+      token,
+      user: userInfo
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'トークン生成エラー: ' + error.message });
   }
 });
 

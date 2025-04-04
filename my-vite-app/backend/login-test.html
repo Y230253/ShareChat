@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShareChat ログインテスト</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #3e8e41;
+        }
+        input, select {
+            padding: 8px;
+            margin: 5px 0;
+            width: 100%;
+        }
+        pre {
+            background: #f5f5f5;
+            padding: 10px;
+            overflow: auto;
+            max-height: 300px;
+        }
+        .error {
+            color: red;
+        }
+        .success {
+            color: green;
+        }
+    </style>
+</head>
+<body>
+    <h1>ShareChat API テスト</h1>
+    
+    <div class="container">
+        <h2>ログインテスト</h2>
+        <form id="loginForm">
+            <div>
+                <label for="apiUrl">API URL:</label>
+                <input type="text" id="apiUrl" value="https://sharechat-backend-1047875971594.asia-northeast1.run.app">
+            </div>
+            <div>
+                <label for="endpoint">エンドポイント:</label>
+                <select id="endpoint">
+                    <option value="/auth/login" selected>/auth/login</option>
+                    <option value="/login">/login</option>
+                </select>
+            </div>
+            <div>
+                <label for="email">メールアドレス:</label>
+                <input type="email" id="email" required>
+            </div>
+            <div>
+                <label for="password">パスワード:</label>
+                <input type="password" id="password" required>
+            </div>
+            <button type="submit">ログイン</button>
+        </form>
+        <div id="loginResult"></div>
+    </div>
+
+    <div class="container">
+        <h2>ユーザーデータテスト</h2>
+        <button id="fetchUsers">ユーザー一覧を取得</button>
+        <div id="usersResult"></div>
+    </div>
+
+    <div class="container">
+        <h2>認証テスト</h2>
+        <p>ログイン成功後にトークンを使って認証テストができます</p>
+        <button id="testAuth" disabled>認証テスト</button>
+        <div id="authResult"></div>
+    </div>
+
+    <script>
+        let currentToken = null;
+
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const loginResult = document.getElementById('loginResult');
+            loginResult.innerHTML = 'ログイン中...';
+
+            const apiUrl = document.getElementById('apiUrl').value;
+            const endpoint = document.getElementById('endpoint').value;
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const response = await fetch(`${apiUrl}${endpoint}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    loginResult.innerHTML = `
+                        <p class="success">ログイン成功</p>
+                        <p>レスポンスデータ:</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                    
+                    // トークンを保存
+                    currentToken = data.token;
+                    
+                    // 認証テストボタンを有効化
+                    document.getElementById('testAuth').disabled = false;
+                    
+                    // ローカルストレージにトークンを保存（フロントエンドの処理をシミュレート）
+                    localStorage.setItem('auth_token', currentToken);
+                    localStorage.setItem('user_data', JSON.stringify(data.user));
+                    
+                    // ログイン成功時のフロントエンドの処理をチェック
+                    console.log("トークン保存テスト:");
+                    console.log("- localStorage.auth_token:", localStorage.getItem('auth_token'));
+                    console.log("- token 型:", typeof currentToken);
+                } else {
+                    loginResult.innerHTML = `
+                        <p class="error">ログイン失敗</p>
+                        <p>エラー:</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                }
+            } catch (error) {
+                loginResult.innerHTML = `
+                    <p class="error">エラーが発生しました</p>
+                    <pre>${error.message}</pre>
+                `;
+            }
+        });
+
+        document.getElementById('fetchUsers').addEventListener('click', async () => {
+            const usersResult = document.getElementById('usersResult');
+            usersResult.innerHTML = 'ユーザーデータを取得中...';
+
+            try {
+                const apiUrl = document.getElementById('apiUrl').value;
+                const response = await fetch(`${apiUrl}/api/debug/users`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    usersResult.innerHTML = `
+                        <p>ユーザー数: ${data.count}</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    usersResult.innerHTML = `
+                        <p class="error">取得失敗</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                }
+            } catch (error) {
+                usersResult.innerHTML = `
+                    <p class="error">エラーが発生しました</p>
+                    <pre>${error.message}</pre>
+                `;
+            }
+        });
+
+        document.getElementById('testAuth').addEventListener('click', async () => {
+            const authResult = document.getElementById('authResult');
+            authResult.innerHTML = '認証テスト中...';
+
+            try {
+                if (!currentToken) {
+                    throw new Error('トークンがありません。先にログインしてください。');
+                }
+
+                const apiUrl = document.getElementById('apiUrl').value;
+                const response = await fetch(`${apiUrl}/api/debug/auth-test`, {
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    authResult.innerHTML = `
+                        <p class="success">認証成功</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    authResult.innerHTML = `
+                        <p class="error">認証失敗</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                }
+            } catch (error) {
+                authResult.innerHTML = `
+                    <p class="error">エラーが発生しました</p>
+                    <pre>${error.message}</pre>
+                `;
+            }
+        });
+    </script>
+</body>
+</html>
