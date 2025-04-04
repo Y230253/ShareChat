@@ -101,6 +101,7 @@ import { useRouter } from 'vue-router'
 import authStore from '../authStore.js'
 import Header from '../components/header.vue'
 import Sidebar from '../components/Sidebar.vue'
+import { apiCall } from '../services/api.js' // APIサービスをインポート
 
 const router = useRouter()
 const file = ref(null)
@@ -131,13 +132,8 @@ onMounted(() => {
 // 人気のタグを取得する関数
 const fetchPopularTags = async () => {
   try {
-    const res = await fetch('http://localhost:3000/tags')
-    if (!res.ok) {
-      console.error('タグ取得エラー:', await res.text())
-      return
-    }
-    
-    const tags = await res.json()
+    // localhostへの直接リクエストからAPIサービスを使用する方法に変更
+    const tags = await apiCall('/tags')
     popularTags.value = tags.slice(0, 10) // 上位10件のみ表示
   } catch (err) {
     console.error('タグ取得エラー:', err)
@@ -241,7 +237,8 @@ const handleSubmit = async () => {
     const formData = new FormData()
     formData.append('file', file.value)
 
-    const uploadRes = await fetch('http://localhost:3000/upload', { 
+    // APIサービスを使用せず、FormDataを直接送信する必要があるため特殊ケース
+    const uploadRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/upload`, { 
       method: 'POST', 
       body: formData 
     })
@@ -256,39 +253,21 @@ const handleSubmit = async () => {
     const imageUrl = uploadData.imageUrl
     const isVideo = mediaType.value === 'video' || uploadData.isVideo
 
-    // 投稿処理（認証ヘッダー付き）
-    const postRes = await fetch('http://localhost:3000/posts', {
+    // 投稿処理（APIサービスを使用）
+    const postData = await apiCall('/posts', {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: {
         image_url: imageUrl,
         message: message.value,
         isVideo: isVideo,
-        tags: selectedTags.value // タグ情報を送信
-      })
-    })
-    
-    if(!postRes.ok) {
-      const errorData = await postRes.json().catch(e => ({ error: '応答解析エラー' }))
-      errorMsg.value = errorData.error || `投稿に失敗しました (${postRes.status})`
-      
-      if (postRes.status === 401 || postRes.status === 403) {
-        errorMsg.value = "認証に失敗しました。再ログインしてください。"
-        setTimeout(() => {
-          authStore.clearUser()
-          router.push('/login')
-        }, 2000)
+        tags: selectedTags.value
       }
-      return
-    }
+    })
     
     // クリーンアップ
     clearFileSelection()
     
-    const postData = await postRes.json()
     console.log('投稿成功:', postData)
     
     router.push('/')

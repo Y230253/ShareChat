@@ -56,6 +56,26 @@ function setUser(userData, newToken) {
   isLoggedIn.value = true;
 }
 
+// APIのレスポンス形式に対応するログインハンドラを追加
+function handleLoginResponse(response) {
+  if (!response) {
+    console.error('ログインレスポンスが空です');
+    return false;
+  }
+  
+  // レスポンス形式を確認
+  if (response.token && (response.user || response.userData)) {
+    // ユーザー情報を取得
+    const userData = response.user || response.userData;
+    // トークンとユーザー情報を保存
+    setUser(userData, response.token);
+    return true;
+  } else {
+    console.error('不正なレスポンス形式:', response);
+    return false;
+  }
+}
+
 // ログアウト時にユーザー情報をクリア
 function clearUser() {
   localStorage.removeItem('token');
@@ -76,6 +96,7 @@ export default {
   isLoggedIn: readonly(isLoggedIn),
   initAuth,
   setUser,
+  handleLoginResponse, // 新しいヘルパー関数をエクスポート
   clearUser,
   getToken
 };

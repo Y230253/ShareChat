@@ -70,6 +70,7 @@ import Header from '../components/header.vue'
 import Sidebar from '../components/Sidebar.vue'
 import PhotoItem from '../components/PhotoItem.vue'
 import authStore from '../authStore.js'
+import { apiCall } from '../services/api.js' // APIサービスをインポート
 
 const router = useRouter()
 const route = useRoute()
@@ -128,31 +129,14 @@ const fetchBookmarkedPosts = async () => {
   error.value = null
   
   try {
-    const token = localStorage.getItem('token')
-    
-    if (!token) {
-      error.value = '認証情報が見つかりません'
-      return
-    }
-    
     // クエリパラメータの構築
-    let url = 'http://localhost:3000/bookmarked-posts'
+    let endpoint = '/bookmarked-posts'
     if (currentTagFilter.value) {
-      url += `?tag=${encodeURIComponent(currentTagFilter.value)}`
+      endpoint += `?tag=${encodeURIComponent(currentTagFilter.value)}`
     }
     
-    // ブックマークした投稿一覧をAPIから取得
-    const res = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    })
-    
-    if (!res.ok) {
-      throw new Error('ブックマーク投稿の取得に失敗しました')
-    }
-    
-    const data = await res.json()
+    // APIサービスを使用
+    const data = await apiCall(endpoint)
     bookmarkedPosts.value = data
     console.log('ブックマーク投稿取得成功:', data.length)
   } catch (err) {

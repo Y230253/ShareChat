@@ -29,9 +29,13 @@ export async function apiCall(endpoint, options = {}) {
     }
   };
 
-  // ボディがあれば追加
+  // ボディがある場合は文字列化が必要かチェック
   if (options.body) {
-    fetchOptions.body = options.body;
+    if (typeof options.body === 'string') {
+      fetchOptions.body = options.body;
+    } else {
+      fetchOptions.body = JSON.stringify(options.body);
+    }
   }
 
   console.log(`API呼び出し: ${url}`, fetchOptions);

@@ -152,6 +152,7 @@ import { useRoute, useRouter } from 'vue-router';
 import Header from '../components/header.vue';
 import Sidebar from '../components/Sidebar.vue';
 import authStore from '../authStore.js';
+import { apiCall } from '../services/api.js'; // APIサービスをインポート
 
 const route = useRoute();
 const router = useRouter();
@@ -331,38 +332,25 @@ const toggleBookmark = async () => {
     return;
   }
   
-  const token = localStorage.getItem('token');
-  if (!token) return;
-  
   try {
     if (isBookmarked.value) {
       // ブックマーク解除
-      const response = await fetch(`${apiUrl}/bookmarks`, {
+      const response = await apiCall('/bookmarks', {
         method: 'DELETE',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ post_id: postId.value })
+        body: { post_id: postId.value }
       });
-      if (response.ok) {
-        isBookmarked.value = false;
-        bookmarkCount.value = Math.max(bookmarkCount.value - 1, 0);
-      }
+      
+      isBookmarked.value = false;
+      bookmarkCount.value = Math.max(bookmarkCount.value - 1, 0);
     } else {
       // ブックマーク追加
-      const response = await fetch(`${apiUrl}/bookmarks`, {
+      const response = await apiCall('/bookmarks', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ post_id: postId.value })
+        body: { post_id: postId.value }
       });
-      if (response.ok) {
-        isBookmarked.value = true;
-        bookmarkCount.value++;
-      }
+      
+      isBookmarked.value = true;
+      bookmarkCount.value++;
     }
   } catch (err) {
     console.error('ブックマーク処理エラー:', err);
@@ -387,38 +375,21 @@ const focusCommentInput = () => {
 const submitComment = async () => {
   if (!isLoggedIn.value || !newComment.value.trim()) return;
   
-  const token = localStorage.getItem('token');
-  if (!token) return;
-  
   try {
     console.log('コメント送信:', {
       post_id: postId.value,
       text: newComment.value
     });
     
-    // 実際のAPIを使用してコメントを送信
-    const response = await fetch(`${apiUrl}/comments`, {
+    // APIサービスを使用
+    const newCommentData = await apiCall('/comments', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({
+      body: {
         post_id: postId.value,
         text: newComment.value
-      })
+      }
     });
     
-    // レスポンスのデバッグ
-    console.log('コメント送信レスポンス:', response.status);
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: '不明なエラー' }));
-      console.error('コメントAPI応答エラー:', errorData);
-      throw new Error(errorData.error || 'コメントの投稿に失敗しました');
-    }
-    
-    const newCommentData = await response.json();
     console.log('新規コメントデータ:', newCommentData);
     
     // 新しいコメントを先頭に追加
