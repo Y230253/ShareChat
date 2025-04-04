@@ -156,9 +156,11 @@ const handleRegister = async () => {
     const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.sharechat-app.com';
     console.log('使用するAPIエンドポイント:', apiBaseUrl);
     
+    // credentials設定をせず、単純なfetchリクエストを実行
     const res = await fetch(`${apiBaseUrl}/register`, {
       method: 'POST',
-      body: formData
+      body: formData,
+      // credentialsプロパティは指定しない
     });
     
     const data = await res.json();

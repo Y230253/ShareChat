@@ -23,6 +23,15 @@ const bucketName = process.env.GOOGLE_CLOUD_STORAGE_BUCKET || 'sharechat-media-b
 const bucket = storage.bucket(bucketName);
 
 const app = express();
+
+// CORSの設定を修正（これが重要なポイント）
+app.use(cors({
+  origin: 'https://storage.googleapis.com', // '*' ではなく具体的なオリジンを指定
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: false // credentialsを使用しない
+}));
+
 // Cloud Storage内のJSONファイルパス設定
 const dataFilePath = 'data/PhotoData.json';
 const userDataFilePath = 'data/UserData.json';
