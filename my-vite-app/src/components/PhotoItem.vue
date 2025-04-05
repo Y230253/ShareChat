@@ -2,15 +2,13 @@
 import { defineProps, ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import authStore from '../authStore.js'
+import { api } from '../services/api.js'  // APIサービスをインポート
 
 const props = defineProps({
   photo: Object // 投稿情報
 })
 
 const router = useRouter()
-
-// API のベース URL
-const apiUrl = 'http://localhost:3000'
 
 // ログイン状態
 const isLoggedIn = ref(false)
@@ -26,6 +24,8 @@ const isMediaLoaded = ref(false)
 // いいね機能
 const liked = ref(false)
 const likeCount = ref(props.photo.likeCount || 0)
+
+// API経由でいいね機能を実装
 const toggleLike = async () => {
   // ログインチェック
   if (!isLoggedIn.value) {
@@ -38,58 +38,29 @@ const toggleLike = async () => {
   }
 
   try {
-    // トークン取得
-    const token = localStorage.getItem('token')
-    if (!token) {
-      errorMsg.value = '認証情報が見つかりません'
-      setTimeout(() => {
-        errorMsg.value = ''
-        router.push('/login')
-      }, 1500)
-      return
-    }
-
     if(liked.value) {
-      const response = await fetch(`${apiUrl}/likes`, {
-        method: 'DELETE',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ post_id: props.photo.id })
-      })
-      if(response.ok) {
-        liked.value = false
-        likeCount.value = Math.max(likeCount.value - 1, 0)
-      } else {
-        console.error("いいね解除エラー", await response.text())
-      }
+      // いいね解除 - APIサービスを使用
+      await api.likes.remove(props.photo.id);
+      liked.value = false;
+      likeCount.value = Math.max(likeCount.value - 1, 0);
     } else {
-      const response = await fetch(`${apiUrl}/likes`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ post_id: props.photo.id })
-      })
-      if(response.ok) {
-        liked.value = true
-        likeCount.value++
-      } else {
-        console.error("いいね追加エラー", await response.text())
-      }
+      // いいね追加 - APIサービスを使用
+      await api.likes.add(props.photo.id);
+      liked.value = true;
+      likeCount.value++;
     }
   } catch (err) {
-    console.error("いいね処理中エラー", err)
-    errorMsg.value = "処理中にエラーが発生しました"
-    setTimeout(() => errorMsg.value = '', 3000)
+    console.error("いいね処理中エラー", err);
+    errorMsg.value = "処理中にエラーが発生しました";
+    setTimeout(() => errorMsg.value = '', 3000);
   }
 }
 
 // ブックマーク機能
 const isBookmarked = ref(false)
 const bookmarkCount = ref(props.photo.bookmarkCount || 0)
+
+// API経由でブックマーク機能を実装
 const toggleBookmarkAction = async () => {
   // ログインチェック
   if (!isLoggedIn.value) {
@@ -102,52 +73,21 @@ const toggleBookmarkAction = async () => {
   }
   
   try {
-    // トークン取得
-    const token = localStorage.getItem('token')
-    if (!token) {
-      errorMsg.value = '認証情報が見つかりません'
-      setTimeout(() => {
-        errorMsg.value = ''
-        router.push('/login')
-      }, 1500)
-      return
-    }
-    
     if(isBookmarked.value) {
-      const response = await fetch(`${apiUrl}/bookmarks`, {
-        method: 'DELETE',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ post_id: props.photo.id })
-      })
-      if(response.ok) {
-        isBookmarked.value = false
-        bookmarkCount.value = Math.max(bookmarkCount.value - 1, 0)
-      } else {
-        console.error("ブックマーク解除エラー", await response.text())
-      }
+      // ブックマーク解除 - APIサービスを使用
+      await api.bookmarks.remove(props.photo.id);
+      isBookmarked.value = false;
+      bookmarkCount.value = Math.max(bookmarkCount.value - 1, 0);
     } else {
-      const response = await fetch(`${apiUrl}/bookmarks`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ post_id: props.photo.id })
-      })
-      if(response.ok) {
-        isBookmarked.value = true
-        bookmarkCount.value++
-      } else {
-        console.error("ブックマーク追加エラー", await response.text())
-      }
+      // ブックマーク追加 - APIサービスを使用
+      await api.bookmarks.add(props.photo.id);
+      isBookmarked.value = true;
+      bookmarkCount.value++;
     }
   } catch (err) {
-    console.error("ブックマーク処理中エラー", err)
-    errorMsg.value = "処理中にエラーが発生しました"
-    setTimeout(() => errorMsg.value = '', 3000)
+    console.error("ブックマーク処理中エラー", err);
+    errorMsg.value = "処理中にエラーが発生しました";
+    setTimeout(() => errorMsg.value = '', 3000);
   }
 }
 
@@ -238,39 +178,42 @@ onMounted(() => {
   }
   
   // いいね・ブックマーク状態の確認
-  if (isLoggedIn.value) {
-    // トークン取得
-    const token = localStorage.getItem('token');
-    
-    // 非同期処理を関数内にラップ
-    const checkUserInteractions = async () => {
-      try {
-        // この投稿をユーザーがいいね済みかチェック - URLを修正
-        const likesRes = await fetch(`${apiUrl}/check-like/${props.photo.id}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (likesRes.ok) {
-          const likesData = await likesRes.json();
-          liked.value = likesData.liked;
-        }
-        
-        // この投稿をユーザーがブックマーク済みかチェック - URLを修正
-        const bookmarksRes = await fetch(`${apiUrl}/check-bookmark/${props.photo.id}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (bookmarksRes.ok) {
-          const bookmarksData = await bookmarksRes.json();
-          isBookmarked.value = bookmarksData.bookmarked;
-        }
-      } catch (err) {
-        console.error("状態チェックエラー:", err);
-      }
-    };
-    
-    // 非同期関数を実行
-    checkUserInteractions();
-  }
+  checkUserInteractions();
+  
+  // 認証状態の変化を監視
+  authStore.$subscribe((_, state) => {
+    isLoggedIn.value = state.isLoggedIn;
+    // 認証状態が変わったら再チェック
+    if (state.isLoggedIn) {
+      checkUserInteractions();
+    }
+  });
 });
+
+// いいね・ブックマーク状態のチェック - APIサービスを使用
+const checkUserInteractions = async () => {
+  if (!isLoggedIn.value) return;
+  
+  try {
+    // チェックAPIを直接呼び出す代わりにAPIサービスを使用
+    const [likeData, bookmarkData] = await Promise.allSettled([
+      api.likes.check(props.photo.id),
+      api.bookmarks.check(props.photo.id)
+    ]);
+    
+    // いいね状態を設定
+    if (likeData.status === 'fulfilled' && likeData.value) {
+      liked.value = likeData.value.liked || false;
+    }
+    
+    // ブックマーク状態を設定
+    if (bookmarkData.status === 'fulfilled' && bookmarkData.value) {
+      isBookmarked.value = bookmarkData.value.bookmarked || false;
+    }
+  } catch (err) {
+    console.error("状態チェックエラー:", err);
+  }
+};
 
 // クリーンアップ
 onUnmounted(() => {

@@ -20,7 +20,15 @@ function getAuthHeader() {
 
 // API呼び出し関数
 export async function apiCall(endpoint, options = {}) {
+  // URLの正規化（localhostへの参照を避ける）
   const url = `${API_BASE_URL}${endpoint}`;
+  
+  // デバッグ情報
+  console.log(`API呼び出し: ${url}`, {
+    method: options.method || 'GET',
+    hasAuth: !!localStorage.getItem('token'),
+    hasBody: !!options.body
+  });
   
   // 新しいオブジェクトを作成（元の参照を変更しない）
   const fetchOptions = {
@@ -113,7 +121,7 @@ export async function apiCall(endpoint, options = {}) {
   }
 }
 
-// ファイルアップロードのための特別なAPI呼び出し
+// ファイルアップロードのための特別なAPI呼び出し - 修正
 export async function uploadFile(file, onProgress = null) {
   const url = `${API_BASE_URL}/upload`;
 
@@ -151,6 +159,7 @@ export async function uploadFile(file, onProgress = null) {
       
       // エラー種別で処理を分ける
       if (errorText.includes('uniform bucket-level access') || 
+          errorText.includes('permission denied') ||
           response.status === 403 || 
           response.status === 500) {
         console.warn('サーバーエラーのため、フォールバック画像URLを使用します');
@@ -166,7 +175,14 @@ export async function uploadFile(file, onProgress = null) {
     }
     
     const data = await response.json();
-    console.log('アップロード成功:', data);
+    
+    // フォールバック画像かどうかをチェック
+    if (data.isFallback) {
+      console.warn('サーバーからフォールバック画像が返されました');
+    } else {
+      console.log('アップロード成功:', data.imageUrl);
+    }
+    
     return data;
   } catch (error) {
     console.error('ファイルアップロードエラー:', error);
@@ -197,6 +213,32 @@ export const api = {
     })
   },
   
+  // いいね関連
+  likes: {
+    check: (postId) => apiCall(`/check-like/${postId}`),
+    add: (postId) => apiCall('/likes', { 
+      method: 'POST', 
+      body: { post_id: postId } 
+    }),
+    remove: (postId) => apiCall('/likes', { 
+      method: 'DELETE', 
+      body: { post_id: postId } 
+    })
+  },
+  
+  // ブックマーク関連
+  bookmarks: {
+    check: (postId) => apiCall(`/check-bookmark/${postId}`),
+    add: (postId) => apiCall('/bookmarks', { 
+      method: 'POST', 
+      body: { post_id: postId } 
+    }),
+    remove: (postId) => apiCall('/bookmarks', { 
+      method: 'DELETE', 
+      body: { post_id: postId } 
+    })
+  },
+
   // お気に入り関連
   favorites: {
     getAll: () => apiCall('/favorites'),

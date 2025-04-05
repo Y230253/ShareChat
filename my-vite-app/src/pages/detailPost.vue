@@ -246,12 +246,12 @@ const fetchComments = async () => {
 const checkUserInteractions = async () => {
   try {
     // いいねチェック
-    const likesData = await apiCall(`/check-like/${postId.value}`);
-    liked.value = likesData.liked;
+    const likeData = await api.likes.check(postId.value);
+    liked.value = likeData.liked;
     
     // ブックマークチェック
-    const bookmarksData = await apiCall(`/check-bookmark/${postId.value}`);
-    isBookmarked.value = bookmarksData.bookmarked;
+    const bookmarkData = await api.bookmarks.check(postId.value);
+    isBookmarked.value = bookmarkData.bookmarked;
   } catch (err) {
     console.error('状態チェックエラー:', err);
   }
@@ -267,20 +267,12 @@ const toggleLike = async () => {
   try {
     if (liked.value) {
       // いいね解除
-      await apiCall('/likes', {
-        method: 'DELETE',
-        body: { post_id: postId.value }
-      });
-      
+      await api.likes.remove(postId.value);
       liked.value = false;
       likeCount.value = Math.max(likeCount.value - 1, 0);
     } else {
       // いいね追加
-      await apiCall('/likes', {
-        method: 'POST',
-        body: { post_id: postId.value }
-      });
-      
+      await api.likes.add(postId.value);
       liked.value = true;
       likeCount.value++;
     }
@@ -299,20 +291,12 @@ const toggleBookmark = async () => {
   try {
     if (isBookmarked.value) {
       // ブックマーク解除
-      const response = await apiCall('/bookmarks', {
-        method: 'DELETE',
-        body: { post_id: postId.value }
-      });
-      
+      await api.bookmarks.remove(postId.value);
       isBookmarked.value = false;
       bookmarkCount.value = Math.max(bookmarkCount.value - 1, 0);
     } else {
       // ブックマーク追加
-      const response = await apiCall('/bookmarks', {
-        method: 'POST',
-        body: { post_id: postId.value }
-      });
-      
+      await api.bookmarks.add(postId.value);
       isBookmarked.value = true;
       bookmarkCount.value++;
     }

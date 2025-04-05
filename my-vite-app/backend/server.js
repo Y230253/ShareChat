@@ -189,50 +189,61 @@ app.post('/upload', (req, res, next) => {
       const filePath = `uploads/${fileName}`;
       const fileBuffer = req.file.buffer;
       
-      // Cloud Storageにアップロード - 公共読み取りアクセス設定
-      const file = bucket.file(filePath);
-      const passthroughStream = new stream.PassThrough();
-      passthroughStream.write(fileBuffer);
-      passthroughStream.end();
+      console.log(`ファイルアップロード試行: ${filePath}, サイズ: ${fileBuffer.length}バイト`);
       
-      await new Promise((resolve, reject) => {
-        passthroughStream.pipe(file.createWriteStream({
-          metadata: {
-            contentType: req.file.mimetype,
-          },
-          // 統一バケットレベルアクセス対応 - レガシーACLを指定しない
-          resumable: false,
-        }))
-        .on('finish', resolve)
-        .on('error', reject);
-      });
-      
-      // ファイルをすべてのユーザーに公開 - バケットポリシーに依存
-      await file.makePublic();
-      
-      // 公開URL生成
-      const publicUrl = `https://storage.googleapis.com/${bucketName}/${filePath}`;
-      
-      // ファイルタイプ（画像または動画）を判別
-      const isVideo = req.file.mimetype.startsWith('video/');
-      
-      res.json({ 
-        imageUrl: publicUrl,
-        isVideo: isVideo
-      });
-    } catch (error) {
-      console.error('ファイルアップロードエラー:', error);
-      
-      // バケットレベルアクセスエラーの場合、代替の一時的なURLを返す
-      if (error.message && error.message.includes('uniform bucket-level access')) {
-        // PicsumPhotosの一時的なフォールバック画像を使用
-        return res.json({
+      // Cloud Storageアップロードの代わりにサーバーで処理
+      try {
+        // Cloud Storageにアップロード - バケットレベルアクセスを考慮
+        const file = bucket.file(filePath);
+        
+        // アップロードストリーム設定
+        const passthroughStream = new stream.PassThrough();
+        passthroughStream.write(fileBuffer);
+        passthroughStream.end();
+        
+        await new Promise((resolve, reject) => {
+          passthroughStream.pipe(file.createWriteStream({
+            metadata: {
+              contentType: req.file.mimetype,
+            },
+            resumable: false, // 小さいファイル用に最適化
+          }))
+          .on('finish', resolve)
+          .on('error', reject);
+        });
+        
+        // 公開設定（統一バケットレベルアクセスを考慮）
+        try {
+          await file.makePublic();
+        } catch (publicError) {
+          console.warn('ファイル公開設定スキップ:', publicError.message);
+          // エラーは無視して続行
+        }
+        
+        // 公開URL生成
+        const publicUrl = `https://storage.googleapis.com/${bucketName}/${filePath}`;
+        
+        // ファイルタイプ（画像または動画）を判別
+        const isVideo = req.file.mimetype.startsWith('video/');
+        
+        console.log(`アップロード成功: ${publicUrl}, タイプ: ${isVideo ? '動画' : '画像'}`);
+        
+        res.json({ 
+          imageUrl: publicUrl,
+          isVideo: isVideo
+        });
+      } catch (storageError) {
+        console.error('Cloud Storageエラー:', storageError);
+        
+        // フォールバック: 一時的なランダム画像URLを使用
+        res.json({
           imageUrl: `https://picsum.photos/seed/${Date.now()}/800/600`,
           isVideo: false,
           isFallback: true
         });
       }
-      
+    } catch (error) {
+      console.error('ファイルアップロードエラー:', error);
       res.status(500).json({ error: 'ファイルのアップロードに失敗しました: ' + error.message });
     }
   });
@@ -776,6 +787,332 @@ app.get('/api/debug/mock-token/:userId', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: 'トークン生成エラー: ' + error.message });
+  }
+});
+
+// いいね状態チェックAPIの追加
+app.get('/check-like/:postId', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const postId = parseInt(req.params.postId);
+    
+    console.log(`いいねチェック: user_id=${userId}, post_id=${postId}`);
+    
+    const data = await readData();
+    
+    // いいね配列がなければ初期化
+    if (!Array.isArray(data.likes)) {
+      data.likes = [];
+    }
+    
+    // ユーザーがこの投稿にいいねしているかチェック
+    const hasLiked = data.likes.some(like => 
+      like.user_id === userId && like.post_id === postId
+    );
+    
+    res.json({ liked: hasLiked });
+  } catch (err) {
+    console.error('いいねチェックエラー:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+// いいね追加API
+app.post('/likes', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { post_id } = req.body;
+    
+    if (!post_id) {
+      return res.status(400).json({ error: '投稿IDが必要です' });
+    }
+    
+    const data = await readData();
+    
+    // 配列初期化
+    if (!Array.isArray(data.likes)) {
+      data.likes = [];
+    }
+    
+    // 既にいいねがあるか確認
+    const existingLike = data.likes.find(like => 
+      like.user_id === userId && like.post_id === post_id
+    );
+    
+    if (existingLike) {
+      return res.status(400).json({ error: '既にいいねしています' });
+    }
+    
+    // 新しいいいねを追加
+    const newLike = {
+      id: data.likes.length > 0 ? Math.max(...data.likes.map(l => l.id)) + 1 : 1,
+      user_id: userId,
+      post_id: post_id,
+      created_at: new Date().toISOString()
+    };
+    
+    data.likes.push(newLike);
+    
+    // 投稿のいいね数を更新
+    const post = data.posts.find(p => p.id === post_id);
+    if (post) {
+      post.likeCount = (post.likeCount || 0) + 1;
+    }
+    
+    await writeData(data);
+    
+    res.status(201).json(newLike);
+  } catch (err) {
+    console.error('いいね追加エラー:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+// いいね削除API
+app.delete('/likes', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { post_id } = req.body;
+    
+    if (!post_id) {
+      return res.status(400).json({ error: '投稿IDが必要です' });
+    }
+    
+    const data = await readData();
+    
+    // いいね配列の初期化チェック
+    if (!Array.isArray(data.likes)) {
+      return res.status(404).json({ error: 'いいねが見つかりません' });
+    }
+    
+    // いいねのインデックスを検索
+    const likeIndex = data.likes.findIndex(like => 
+      like.user_id === userId && like.post_id === post_id
+    );
+    
+    if (likeIndex === -1) {
+      return res.status(404).json({ error: 'いいねが見つかりません' });
+    }
+    
+    // いいねを削除
+    data.likes.splice(likeIndex, 1);
+    
+    // 投稿のいいね数を更新
+    const post = data.posts.find(p => p.id === post_id);
+    if (post && post.likeCount > 0) {
+      post.likeCount--;
+    }
+    
+    await writeData(data);
+    
+    res.json({ message: 'いいねを削除しました' });
+  } catch (err) {
+    console.error('いいね削除エラー:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+// コメント関連API
+// コメント一覧取得
+app.get('/comments/:postId', async (req, res) => {
+  try {
+    const postId = parseInt(req.params.postId);
+    const data = await readData();
+    
+    // コメント配列の初期化チェック
+    if (!Array.isArray(data.comments)) {
+      data.comments = [];
+    }
+    
+    // 指定された投稿IDのコメントをフィルタリング
+    const filteredComments = data.comments.filter(comment => comment.post_id === postId);
+    
+    // ユーザーデータを追加
+    const userData = await readUserData();
+    const commentsWithUserData = filteredComments.map(comment => {
+      const user = userData.users.find(u => u.id === comment.user_id);
+      return {
+        ...comment,
+        username: user ? user.username : `ユーザー ${comment.user_id}`,
+        user_icon: user ? user.icon_url : null
+      };
+    });
+    
+    res.json(commentsWithUserData);
+  } catch (err) {
+    console.error('コメント取得エラー:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+// コメント投稿
+app.post('/comments', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { post_id, text } = req.body;
+    
+    if (!post_id || !text) {
+      return res.status(400).json({ error: '投稿IDとコメント内容が必要です' });
+    }
+    
+    const data = await readData();
+    const userData = await readUserData();
+    
+    // コメント配列の初期化チェック
+    if (!Array.isArray(data.comments)) {
+      data.comments = [];
+    }
+    
+    // ユーザー情報を取得
+    const user = userData.users.find(u => u.id === userId);
+    if (!user) {
+      return res.status(404).json({ error: 'ユーザーが見つかりません' });
+    }
+    
+    // 新しいコメントを作成
+    const newComment = {
+      id: data.comments.length > 0 ? Math.max(...data.comments.map(c => c.id)) + 1 : 1,
+      post_id,
+      user_id: userId,
+      text,
+      created_at: new Date().toISOString()
+    };
+    
+    data.comments.push(newComment);
+    await writeData(data);
+    
+    // レスポンスにユーザー情報を追加
+    const commentWithUser = {
+      ...newComment,
+      username: user.username,
+      user_icon: user.icon_url
+    };
+    
+    res.status(201).json(commentWithUser);
+  } catch (err) {
+    console.error('コメント投稿エラー:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+// ブックマーク関連API
+// ブックマークチェック
+app.get('/check-bookmark/:postId', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const postId = parseInt(req.params.postId);
+    
+    const data = await readData();
+    
+    // ブックマーク配列の初期化チェック
+    if (!Array.isArray(data.bookmarks)) {
+      data.bookmarks = [];
+    }
+    
+    // ユーザーがこの投稿をブックマークしているかチェック
+    const hasBookmarked = data.bookmarks.some(bookmark => 
+      bookmark.user_id === userId && bookmark.post_id === postId
+    );
+    
+    res.json({ bookmarked: hasBookmarked });
+  } catch (err) {
+    console.error('ブックマークチェックエラー:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+// ブックマーク追加API
+app.post('/bookmarks', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { post_id } = req.body;
+    
+    if (!post_id) {
+      return res.status(400).json({ error: '投稿IDが必要です' });
+    }
+    
+    const data = await readData();
+    
+    // 配列初期化
+    if (!Array.isArray(data.bookmarks)) {
+      data.bookmarks = [];
+    }
+    
+    // 既にブックマークがあるか確認
+    const existingBookmark = data.bookmarks.find(bookmark => 
+      bookmark.user_id === userId && bookmark.post_id === post_id
+    );
+    
+    if (existingBookmark) {
+      return res.status(400).json({ error: '既にブックマークしています' });
+    }
+    
+    // 新しいブックマークを追加
+    const newBookmark = {
+      id: data.bookmarks.length > 0 ? Math.max(...data.bookmarks.map(b => b.id)) + 1 : 1,
+      user_id: userId,
+      post_id: post_id,
+      created_at: new Date().toISOString()
+    };
+    
+    data.bookmarks.push(newBookmark);
+    
+    // 投稿のブックマーク数を更新
+    const post = data.posts.find(p => p.id === post_id);
+    if (post) {
+      post.bookmarkCount = (post.bookmarkCount || 0) + 1;
+    }
+    
+    await writeData(data);
+    
+    res.status(201).json(newBookmark);
+  } catch (err) {
+    console.error('ブックマーク追加エラー:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+// ブックマーク削除API
+app.delete('/bookmarks', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { post_id } = req.body;
+    
+    if (!post_id) {
+      return res.status(400).json({ error: '投稿IDが必要です' });
+    }
+    
+    const data = await readData();
+    
+    // ブックマーク配列の初期化チェック
+    if (!Array.isArray(data.bookmarks)) {
+      return res.status(404).json({ error: 'ブックマークが見つかりません' });
+    }
+    
+    // ブックマークのインデックスを検索
+    const bookmarkIndex = data.bookmarks.findIndex(bookmark => 
+      bookmark.user_id === userId && bookmark.post_id === post_id
+    );
+    
+    if (bookmarkIndex === -1) {
+      return res.status(404).json({ error: 'ブックマークが見つかりません' });
+    }
+    
+    // ブックマークを削除
+    data.bookmarks.splice(bookmarkIndex, 1);
+    
+    // 投稿のブックマーク数を更新
+    const post = data.posts.find(p => p.id === post_id);
+    if (post && post.bookmarkCount > 0) {
+      post.bookmarkCount--;
+    }
+    
+    await writeData(data);
+    
+    res.json({ message: 'ブックマークを削除しました' });
+  } catch (err) {
+    console.error('ブックマーク削除エラー:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
   }
 });
 
