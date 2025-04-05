@@ -1,115 +1,120 @@
-import { ref, readonly } from 'vue';
+import { reactive, computed, watch } from 'vue';
 
-// 認証状態を管理するためのストア
-const user = ref(null);
-const isLoggedIn = ref(false);
-const token = ref('');
+// リアクティブな状態オブジェクト
+const state = reactive({
+  isLoggedIn: false,
+  user: null,
+  token: null,
+  error: null
+});
 
-// 初期化時にlocalStorageからユーザー情報を取得
-function initAuth() {
-  console.log('認証情報の初期化を開始...');
+// ストア関数
+const authStore = {
+  // ゲッター
+  get isLoggedIn() { 
+    return computed(() => state.isLoggedIn);
+  },
+  get user() { 
+    return computed(() => state.user);
+  },
+  get error() {
+    return computed(() => state.error);
+  },
   
-  const storedToken = localStorage.getItem('token');
-  const userData = localStorage.getItem('user');
-  
-  if (storedToken) {
-    console.log('トークンが見つかりました');
+  // 認証初期化
+  initAuth() {
+    console.log('認証情報の初期化を開始...');
+    const token = localStorage.getItem('token');
     
-    try {
-      token.value = storedToken;
+    if (token) {
+      console.log('トークンが見つかりました');
       
+      // ユーザーデータの復元
+      const userData = localStorage.getItem('userData');
       if (userData) {
-        user.value = JSON.parse(userData);
-        console.log('ユーザーデータを復元しました:', user.value.username || 'unknown');
-      } else {
-        console.warn('トークンは存在しますが、ユーザーデータがありません');
-      }
-      
-      isLoggedIn.value = true;
-      
-      // トークン検証（簡易）
-      const tokenParts = storedToken.split('.');
-      if (tokenParts.length !== 3) {
-        console.warn('トークン形式が不正です');
-        clearUser(); // 不正なトークンはクリア
-        return;
-      }
-      
-      // トークンの期限をチェック
-      try {
-        const payload = JSON.parse(atob(tokenParts[1]));
-        const expiry = payload.exp * 1000; // JWTのexpはUNIX秒
-        
-        if (Date.now() >= expiry) {
-          console.warn('トークンの期限が切れています');
-          clearUser();
-          return;
+        try {
+          const user = JSON.parse(userData);
+          this.setUser(user);
+          console.log(`ユーザーデータを復元しました: ${user.username}`);
+        } catch (e) {
+          console.error('ユーザーデータの復元に失敗しました', e);
+          localStorage.removeItem('userData');
         }
-      } catch (e) {
-        console.error('トークン解析エラー:', e);
       }
-    } catch (err) {
-      console.error('認証情報の復元に失敗:', err);
-      clearUser();
+      
+      state.isLoggedIn = true;
+      state.token = token;
+    } else {
+      console.log('認証トークンが見つかりません');
+      state.isLoggedIn = false;
+      state.user = null;
+      state.token = null;
     }
-  } else {
-    console.log('認証トークンが見つかりません');
-    clearUser();
-  }
-}
-
-// ログイン時にユーザー情報をセット
-function setUser(userData, newToken) {
-  localStorage.setItem('user', JSON.stringify(userData));
-  if (newToken) {
-    localStorage.setItem('token', newToken);
-    token.value = newToken;
-  }
-  user.value = userData;
-  isLoggedIn.value = true;
-}
-
-// APIのレスポンス形式に対応するログインハンドラを追加
-function handleLoginResponse(response) {
-  if (!response) {
-    console.error('ログインレスポンスが空です');
-    return false;
-  }
+    console.log(`認証状態: ${state.isLoggedIn ? 'ログイン済み' : '未ログイン'}`);
+  },
   
-  // レスポンス形式を確認
-  if (response.token && (response.user || response.userData)) {
-    // ユーザー情報を取得
-    const userData = response.user || response.userData;
-    // トークンとユーザー情報を保存
-    setUser(userData, response.token);
-    return true;
-  } else {
-    console.error('不正なレスポンス形式:', response);
-    return false;
+  // ユーザー設定
+  setUser(userData) {
+    state.user = userData;
+    if (userData) {
+      localStorage.setItem('userData', JSON.stringify(userData));
+    } else {
+      localStorage.removeItem('userData');
+    }
+  },
+  
+  // ログイン
+  login(userData, token) {
+    state.isLoggedIn = true;
+    state.token = token;
+    this.setUser(userData);
+    localStorage.setItem('token', token);
+  },
+  
+  // ログアウト
+  logout() {
+    state.isLoggedIn = false;
+    state.user = null;
+    state.token = null;
+    state.error = null;
+    localStorage.removeItem('token');
+    localStorage.removeItem('userData');
+  },
+  
+  // エラー設定
+  setError(error) {
+    state.error = error;
+  },
+  
+  // カスタムイベントリスナー用コールバック配列
+  _listeners: {
+    'auth-change': []
+  },
+  
+  // イベントリスナー追加 ($subscribeの代替)
+  on(event, callback) {
+    if (!this._listeners[event]) {
+      this._listeners[event] = [];
+    }
+    this._listeners[event].push(callback);
+    
+    // クリーンアップ関数を返す
+    return () => {
+      this._listeners[event] = this._listeners[event].filter(cb => cb !== callback);
+    };
+  },
+  
+  // イベント発火
+  _emit(event, ...args) {
+    if (this._listeners[event]) {
+      this._listeners[event].forEach(callback => callback(...args));
+    }
   }
-}
-
-// ログアウト時にユーザー情報をクリア
-function clearUser() {
-  localStorage.removeItem('token');
-  localStorage.removeItem('user');
-  token.value = '';
-  user.value = null;
-  isLoggedIn.value = false;
-}
-
-// 現在のトークンを取得
-function getToken() {
-  return token.value || localStorage.getItem('token') || '';
-}
-
-// エクスポート
-export default {
-  user: readonly(user),
-  isLoggedIn: readonly(isLoggedIn),
-  initAuth,
-  setUser,
-  handleLoginResponse, // 新しいヘルパー関数をエクスポート
-  clearUser,
-  getToken
 };
+
+// authStoreの状態変化を監視してイベントを発火
+watch(() => state.isLoggedIn, (newValue) => {
+  authStore._emit('auth-change', { isLoggedIn: newValue, user: state.user });
+});
+
+export default authStore;

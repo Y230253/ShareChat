@@ -1116,10 +1116,12 @@ app.delete('/bookmarks', authenticateToken, async (req, res) => {
   }
 });
 
-// ブックマークした投稿を取得するエンドポイント
+// ブックマークした投稿を取得するエンドポイント - 確実にフィルタリングする
 app.get('/bookmarked-posts', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
+    console.log(`ユーザー${userId}のブックマーク投稿を取得`);
+    
     const data = await readData();
     
     // ブックマーク配列の初期化チェック
@@ -1134,56 +1136,23 @@ app.get('/bookmarked-posts', authenticateToken, async (req, res) => {
       .filter(bookmark => bookmark.user_id === userId)
       .map(bookmark => bookmark.post_id);
     
+    console.log(`ユーザー${userId}がブックマークした投稿ID: `, bookmarkedPostIds);
+    
     // 投稿配列の初期化チェック
     if (!Array.isArray(data.posts)) {
       return res.json([]);
     }
     
-    // ブックマークした投稿を取得
+    // ブックマークした投稿だけを厳密にフィルタリング
     const bookmarkedPosts = data.posts.filter(post => 
       bookmarkedPostIds.includes(post.id)
     );
     
-    // ブックマーク順にソート（新しい順）
-    bookmarkedPosts.sort((a, b) => {
-      const bookmarkA = data.bookmarks.find(
-        bookmark => bookmark.user_id === userId && bookmark.post_id === a.id
-      );
-      const bookmarkB = data.bookmarks.find(
-        bookmark => bookmark.user_id === userId && bookmark.post_id === b.id
-      );
-      
-      return new Date(bookmarkB.created_at) - new Date(bookmarkA.created_at);
-    });
-    
-    res.json(bookmarkedPosts);
-  } catch (err) {
-    console.error('ブックマーク投稿取得エラー:', err);
-    res.status(500).json({ error: 'サーバーエラーが発生しました' });
-  }
-});
-
-// タグでフィルタリングされた投稿を取得するエンドポイント
-app.get('/posts-by-tag/:tagName', async (req, res) => {
-  try {
-    const tagName = req.params.tagName.toLowerCase();
-    console.log(`タグ「${tagName}」の投稿をフィルタリング`);
-    
-    const data = await readData();
-    
-    // タグでフィルタリング
-    const filteredPosts = data.posts.filter(post => 
-      Array.isArray(post.tags) && 
-      post.tags.some(tag => tag.toLowerCase() === tagName)
-    );
-    
-    // 投稿日時の降順でソート
-    filteredPosts.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    console.log(`ブックマーク投稿: ${bookmarkedPosts.length}件`);
     
     // ユーザー情報を付加
-    const postsWithUserInfo = await Promise.all(filteredPosts.map(async (post) => {
-      // ユーザーデータを取得
-      const userData = await readUserData();
+    const userData = await readUserData();
+    const postsWithUserInfo = bookmarkedPosts.map(post => {
       const user = userData.users.find(u => u.id === post.user_id);
       
       return {
@@ -1191,7 +1160,45 @@ app.get('/posts-by-tag/:tagName', async (req, res) => {
         username: user ? user.username : `ユーザー${post.user_id}`,
         user_icon: user ? user.icon_url : null
       };
-    }));
+    });
+    
+    res.json(postsWithUserInfo);
+  } catch (err) {
+    console.error('ブックマーク投稿取得エラー:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+// タグでフィルタリングされた投稿を取得するエンドポイント - 改善版
+app.get('/posts-by-tag/:tagName', async (req, res) => {
+  try {
+    const tagName = decodeURIComponent(req.params.tagName).toLowerCase();
+    console.log(`タグ「${tagName}」の投稿をフィルタリング`);
+    
+    const data = await readData();
+    
+    // タグでフィルタリング
+    const filteredPosts = data.posts.filter(post => 
+      Array.isArray(post.tags) && 
+      post.tags.some(tag => tag.toLowerCase() === tagName.toLowerCase())
+    );
+    
+    console.log(`タグ「${tagName}」の投稿: ${filteredPosts.length}件`);
+    
+    // 投稿日時の降順でソート
+    filteredPosts.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    
+    // ユーザー情報を付加
+    const userData = await readUserData();
+    const postsWithUserInfo = filteredPosts.map(post => {
+      const user = userData.users.find(u => u.id === post.user_id);
+      
+      return {
+        ...post,
+        username: user ? user.username : `ユーザー${post.user_id}`,
+        user_icon: user ? user.icon_url : null
+      };
+    });
     
     res.json(postsWithUserInfo);
   } catch (err) {
@@ -1199,6 +1206,255 @@ app.get('/posts-by-tag/:tagName', async (req, res) => {
     res.status(500).json({ error: 'サーバーエラーが発生しました' });
   }
 });
+
+// 大容量ファイルのアップロード用の一時ディレクトリ
+const tempUploadsDir = path.join(__dirname, 'temp_uploads');
+if (!fs.existsSync(tempUploadsDir)) {
+  fs.mkdirSync(tempUploadsDir, { recursive: true });
+}
+
+// アップロードセッションの管理
+const uploadSessions = {};
+
+// アップロードセッション開始エンドポイント
+app.post('/upload-session', authenticateToken, (req, res) => {
+  const { filename, fileType, fileSize, sessionId, totalChunks } = req.body;
+  
+  if (!filename || !fileType || !fileSize || !sessionId || !totalChunks) {
+    return res.status(400).json({ error: '不正なリクエストパラメータ' });
+  }
+  
+  console.log(`アップロードセッション開始: ${sessionId}, ファイル: ${filename}, サイズ: ${fileSize}バイト`);
+  
+  // ユーザー固有のセッションディレクトリを作成
+  const userId = req.user.id;
+  const sessionDir = path.join(tempUploadsDir, `${userId}_${sessionId}`);
+  
+  try {
+    if (!fs.existsSync(sessionDir)) {
+      fs.mkdirSync(sessionDir, { recursive: true });
+    }
+    
+    // セッション情報を保存
+    uploadSessions[sessionId] = {
+      userId,
+      filename,
+      fileType,
+      fileSize,
+      totalChunks,
+      receivedChunks: 0,
+      chunkStatus: Array(parseInt(totalChunks)).fill(false),
+      sessionDir,
+      createdAt: new Date()
+    };
+    
+    res.json({ success: true, message: 'アップロードセッションが作成されました' });
+  } catch (error) {
+    console.error('アップロードセッション作成エラー:', error);
+    res.status(500).json({ error: 'セッション作成に失敗しました' });
+  }
+});
+
+// チャンクアップロードエンドポイント
+const chunkUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      const { sessionId } = req.body;
+      const session = uploadSessions[sessionId];
+      
+      if (!session) {
+        return cb(new Error('セッションが見つかりません'));
+      }
+      
+      cb(null, session.sessionDir);
+    },
+    filename: (req, file, cb) => {
+      const { chunkIndex } = req.body;
+      cb(null, `chunk_${chunkIndex}`);
+    }
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 } // 各チャンク5MB上限
+});
+
+app.post('/upload-chunk', authenticateToken, (req, res) => {
+  chunkUpload.single('chunk')(req, res, (err) => {
+    if (err) {
+      console.error('チャンクアップロードエラー:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    
+    const { sessionId, chunkIndex, totalChunks } = req.body;
+    const session = uploadSessions[sessionId];
+    
+    if (!session) {
+      return res.status(404).json({ error: 'セッションが見つかりません' });
+    }
+    
+    // チャンクステータスを更新
+    const index = parseInt(chunkIndex);
+    session.chunkStatus[index] = true;
+    session.receivedChunks++;
+    
+    console.log(`セッション ${sessionId}: チャンク ${parseInt(chunkIndex) + 1}/${totalChunks} 受信済み`);
+    
+    res.json({ 
+      success: true, 
+      receivedChunks: session.receivedChunks, 
+      totalChunks: parseInt(totalChunks) 
+    });
+  });
+});
+
+// アップロード完了処理
+app.post('/upload-session/complete', authenticateToken, async (req, res) => {
+  const { sessionId } = req.body;
+  const session = uploadSessions[sessionId];
+  
+  if (!session) {
+    return res.status(404).json({ error: 'セッションが見つかりません' });
+  }
+  
+  // すべてのチャンクが揃っているか確認
+  if (session.receivedChunks !== parseInt(session.totalChunks)) {
+    return res.status(400).json({ 
+      error: `チャンクが不足しています (${session.receivedChunks}/${session.totalChunks})` 
+    });
+  }
+  
+  try {
+    console.log(`セッション ${sessionId}: すべてのチャンクを結合中...`);
+    
+    // 最終的なファイル名を決定
+    const fileName = `${Date.now()}-${session.filename.replace(/\s+/g, '-')}`;
+    const filePath = `uploads/${fileName}`;
+    
+    // チャンクを結合
+    const isVideo = session.fileType.startsWith('video/');
+    const fileExtension = isVideo ? '.mp4' : '.jpg';
+    const finalFileName = `${session.userId}_${Date.now()}${fileExtension}`;
+    const finalLocalPath = path.join(tempUploadsDir, finalFileName);
+    
+    // ファイルストリーム作成
+    const outputStream = fs.createWriteStream(finalLocalPath);
+    
+    // チャンクを順番に結合
+    for (let i = 0; i < session.totalChunks; i++) {
+      const chunkPath = path.join(session.sessionDir, `chunk_${i}`);
+      
+      await new Promise((resolve, reject) => {
+        const chunkStream = fs.createReadStream(chunkPath);
+        chunkStream.pipe(outputStream, { end: false });
+        chunkStream.on('end', resolve);
+        chunkStream.on('error', reject);
+      });
+      
+      // 処理済みのチャンクを削除
+      fs.unlinkSync(chunkPath);
+    }
+    
+    // すべてのチャンクの書き込み完了
+    outputStream.end();
+    
+    await new Promise((resolve) => {
+      outputStream.on('finish', resolve);
+    });
+    
+    console.log(`セッション ${sessionId}: チャンク結合完了`);
+    
+    // Cloud Storageにアップロード
+    const file = bucket.file(filePath);
+    const fileBuffer = fs.readFileSync(finalLocalPath);
+    
+    await new Promise((resolve, reject) => {
+      const blobStream = file.createWriteStream({
+        metadata: {
+          contentType: session.fileType
+        },
+        resumable: false
+      });
+      
+      blobStream.on('finish', resolve);
+      blobStream.on('error', reject);
+      blobStream.end(fileBuffer);
+    });
+    
+    // 公開URL生成
+    await file.makePublic();
+    const publicUrl = `https://storage.googleapis.com/${bucketName}/${filePath}`;
+    
+    console.log(`セッション ${sessionId}: Cloud Storageへのアップロード完了`);
+    
+    // ローカルの一時ファイルを削除
+    fs.unlinkSync(finalLocalPath);
+    fs.rmdirSync(session.sessionDir, { recursive: true });
+    
+    // セッション情報を削除
+    delete uploadSessions[sessionId];
+    
+    // 成功レスポンス
+    res.json({ 
+      imageUrl: publicUrl, 
+      isVideo: isVideo
+    });
+    
+  } catch (error) {
+    console.error(`セッション ${sessionId} 完了エラー:`, error);
+    
+    // エラー時にも一時ファイルを削除
+    try {
+      fs.rmdirSync(session.sessionDir, { recursive: true });
+    } catch (cleanupError) {
+      console.error('一時ファイル削除エラー:', cleanupError);
+    }
+    
+    delete uploadSessions[sessionId];
+    res.status(500).json({ error: 'ファイル処理中にエラーが発生しました' });
+  }
+});
+
+// アップロードセッション中止
+app.post('/upload-session/abort', authenticateToken, (req, res) => {
+  const { sessionId } = req.body;
+  const session = uploadSessions[sessionId];
+  
+  if (!session) {
+    return res.status(404).json({ error: 'セッションが見つかりません' });
+  }
+  
+  try {
+    // セッションディレクトリとファイルを削除
+    fs.rmdirSync(session.sessionDir, { recursive: true });
+    delete uploadSessions[sessionId];
+    
+    console.log(`セッション ${sessionId}: ユーザーによる中止`);
+    res.json({ success: true, message: 'アップロードをキャンセルしました' });
+  } catch (error) {
+    console.error(`セッション ${sessionId} 中止エラー:`, error);
+    res.status(500).json({ error: 'セッション中止処理に失敗しました' });
+  }
+});
+
+// 古いアップロードセッションをクリーンアップする定期実行タスク
+setInterval(() => {
+  const now = new Date();
+  const sessionTimeoutMs = 24 * 60 * 60 * 1000; // 24時間
+  
+  for (const [sessionId, session] of Object.entries(uploadSessions)) {
+    const sessionAge = now - new Date(session.createdAt);
+    
+    if (sessionAge > sessionTimeoutMs) {
+      console.log(`古いセッション ${sessionId} を削除します`);
+      
+      try {
+        fs.rmdirSync(session.sessionDir, { recursive: true });
+      } catch (error) {
+        console.error(`セッション ${sessionId} クリーンアップエラー:`, error);
+      }
+      
+      delete uploadSessions[sessionId];
+    }
+  }
+}, 3600000); // 1時間ごとに実行
 
 // すべての他のリクエストをindex.htmlにリダイレクト（SPAルーティング用）
 // ※必ず他のルートの最後に配置

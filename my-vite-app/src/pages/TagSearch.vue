@@ -27,12 +27,21 @@ const toggleSidebar = () => {
 // タグ一覧を取得
 const fetchTags = async () => {
   try {
-    tags.value = await api.tags.getAll();
-    console.log(`${tags.value.length}件のタグを取得しました`);
+    console.log('タグ一覧を取得中...');
+    const response = await api.tags.getAll();
+    console.log('タグAPIレスポンス:', response);
+    
+    if (Array.isArray(response)) {
+      tags.value = response;
+      console.log(`${tags.value.length}件のタグを取得しました`);
+    } else {
+      console.warn('APIから返されたタグが配列ではありません');
+      tags.value = [];
+    }
   } catch (err) {
     console.error("タグ取得エラー:", err);
     error.value = "タグの取得に失敗しました";
-    tags.value = []; // エラー時は空配列
+    tags.value = [];
   }
 };
 
@@ -40,6 +49,7 @@ const fetchTags = async () => {
 const fetchPostsByTag = async (tagName) => {
   if (!tagName) {
     filteredPosts.value = [];
+    loading.value = false;
     return;
   }
   
@@ -49,12 +59,19 @@ const fetchPostsByTag = async (tagName) => {
   try {
     console.log(`タグ「${tagName}」で投稿を検索します`);
     // 新しく追加したAPIメソッドを使用
-    filteredPosts.value = await api.tags.getPostsByTag(tagName);
-    console.log(`タグ「${tagName}」の投稿を${filteredPosts.value.length}件取得しました`);
+    const posts = await api.tags.getPostsByTag(tagName);
+    
+    if (Array.isArray(posts)) {
+      filteredPosts.value = posts;
+      console.log(`タグ「${tagName}」の投稿を${filteredPosts.value.length}件取得しました`);
+    } else {
+      console.warn('APIから返された投稿が配列ではありません');
+      filteredPosts.value = [];
+    }
   } catch (err) {
     console.error("投稿取得エラー:", err);
     error.value = `タグ「${tagName}」の投稿取得に失敗しました`;
-    filteredPosts.value = []; // エラー時は空配列
+    filteredPosts.value = [];
   } finally {
     loading.value = false;
   }
@@ -62,6 +79,7 @@ const fetchPostsByTag = async (tagName) => {
 
 // タグ選択時の処理
 const selectTag = (tagName) => {
+  console.log(`タグを選択: ${tagName}`);
   selectedTag.value = tagName;
   // URLのクエリパラメータを更新
   router.replace({ path: '/tags', query: { tag: tagName } });
@@ -69,10 +87,12 @@ const selectTag = (tagName) => {
 
 // コンポーネント初期化
 onMounted(async () => {
+  // まずタグ一覧を取得
   await fetchTags();
   
   // URLからタグが指定されていれば、投稿を取得
   if (tagFromUrl.value) {
+    console.log(`URLからタグを検出: ${tagFromUrl.value}`);
     selectedTag.value = tagFromUrl.value;
     await fetchPostsByTag(selectedTag.value);
   } else {
@@ -82,6 +102,7 @@ onMounted(async () => {
 
 // URLのクエリパラメータが変わったら投稿を再取得
 watch(tagFromUrl, async (newTag) => {
+  console.log(`URLパラメータが変更: ${newTag}`);
   if (newTag !== selectedTag.value) {
     selectedTag.value = newTag;
     if (newTag) {
@@ -108,9 +129,15 @@ watch(tagFromUrl, async (newTag) => {
         
         <!-- タグ一覧 -->
         <div class="tag-container">
-          <div v-if="tags.length === 0" class="no-tags">
+          <div v-if="loading && tags.length === 0" class="loading">
+            <div class="spinner"></div>
+            <p>タグを読み込み中...</p>
+          </div>
+          
+          <div v-else-if="tags.length === 0" class="no-tags">
             タグが見つかりません
           </div>
+          
           <div v-else class="tag-list">
             <button 
               v-for="tag in tags" 

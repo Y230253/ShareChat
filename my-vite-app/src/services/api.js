@@ -278,7 +278,23 @@ export const api = {
   },
   
   // ファイルアップロード
-  upload: (file, onProgress) => uploadFile(file, onProgress)
+  upload: (file, onProgress) => uploadFile(file, onProgress),
+  
+  // 大容量ファイルアップロード用セッション管理
+  uploadSession: {
+    create: (sessionData) => apiCall('/upload-session', {
+      method: 'POST',
+      body: sessionData
+    }),
+    complete: (sessionId) => apiCall('/upload-session/complete', {
+      method: 'POST',
+      body: { sessionId }
+    }),
+    abort: (sessionId) => apiCall('/upload-session/abort', {
+      method: 'POST',
+      body: { sessionId }
+    })
+  }
 };
 
 export default api;

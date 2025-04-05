@@ -155,6 +155,9 @@ const goToDetail = () => {
   router.push(`/detail/${props.photo.id}`);
 };
 
+// 認証解除用ハンドラ
+let authChangeUnsubscribe = null;
+
 // 初期化
 onMounted(() => {
   // ログイン状態の確認
@@ -173,9 +176,10 @@ onMounted(() => {
   // いいね・ブックマーク状態を確認
   checkUserInteractions();
   
-  // 認証状態の変化を監視
-  authStore.$subscribe((_, state) => {
+  // 認証状態の変化を監視 ($subscribeではなくon関数を使用)
+  authChangeUnsubscribe = authStore.on('auth-change', (state) => {
     isLoggedIn.value = state.isLoggedIn;
+    // 認証状態が変わったら再チェック
     if (state.isLoggedIn) {
       checkUserInteractions();
     }
@@ -214,6 +218,11 @@ onUnmounted(() => {
   if (observer && mediaRef.value) {
     observer.unobserve(mediaRef.value);
     observer.disconnect();
+  }
+  
+  // 認証リスナーの解除
+  if (authChangeUnsubscribe) {
+    authChangeUnsubscribe();
   }
 });
 </script>

@@ -29,7 +29,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import Header from '../components/header.vue';
 import Sidebar from '../components/Sidebar.vue';
@@ -42,12 +42,14 @@ const isSidebarOpen = ref(false);
 const bookmarkedPosts = ref([]);
 const loading = ref(true);
 const error = ref('');
+let authChangeUnsubscribe = null;
 
 const toggleSidebar = () => {
   isSidebarOpen.value = !isSidebarOpen.value;
 };
 
 const fetchBookmarkedPosts = async () => {
+  // ログイン確認
   if (!authStore.isLoggedIn.value) {
     error.value = 'お気に入りを表示するにはログインが必要です';
     setTimeout(() => router.push('/login'), 2000);
@@ -58,23 +60,33 @@ const fetchBookmarkedPosts = async () => {
   error.value = '';
   
   try {
-    // ブックマークした投稿を取得
-    bookmarkedPosts.value = await api.bookmarks.getPosts();
-    console.log(`ブックマークされた投稿を${bookmarkedPosts.value.length}件取得しました`);
+    console.log('ブックマークした投稿を取得中...');
+    const posts = await api.bookmarks.getPosts();
+    
+    // バックエンドでフィルタリングされていることを確認
+    if (Array.isArray(posts)) {
+      bookmarkedPosts.value = posts;
+      console.log(`ブックマークされた投稿を${posts.length}件取得しました`);
+    } else {
+      bookmarkedPosts.value = [];
+      console.warn('取得したブックマーク投稿が配列ではありません:', posts);
+    }
   } catch (err) {
     console.error("ブックマーク投稿取得エラー:", err);
     error.value = "お気に入り投稿の取得に失敗しました";
-    bookmarkedPosts.value = []; // エラー時は空配列を設定
+    bookmarkedPosts.value = [];
   } finally {
     loading.value = false;
   }
 };
 
+// 認証状態変更時のリスナー設定
 onMounted(() => {
   fetchBookmarkedPosts();
   
-  // 認証状態変更時に再取得
-  authStore.$subscribe((_, state) => {
+  // 認証状態変更のリスナーを設定
+  authChangeUnsubscribe = authStore.on('auth-change', (state) => {
+    console.log('認証状態変更を検出:', state);
     if (state.isLoggedIn) {
       fetchBookmarkedPosts();
     } else {
@@ -82,6 +94,13 @@ onMounted(() => {
       error.value = 'お気に入りを表示するにはログインが必要です';
     }
   });
+});
+
+// コンポーネント破棄時にリスナーを削除
+onUnmounted(() => {
+  if (authChangeUnsubscribe) {
+    authChangeUnsubscribe();
+  }
 });
 </script>
 
