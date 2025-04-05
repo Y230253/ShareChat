@@ -2,6 +2,8 @@ import { createApp } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
 import App from './App.vue'
 import authStore from './authStore.js'
+import './style.css'
+import { initAssetSystem } from './utils/asset-loader'
 
 // コンポーネントのインポート
 import HomePage from './pages/Home.vue'
@@ -34,6 +36,9 @@ router.beforeEach((to, from, next) => {
   console.log(`Route change: ${from.path} -> ${to.path}`);
   next();
 });
+
+// アセットシステムを初期化
+initAssetSystem();
 
 // アプリケーション初期化
 console.log('App initializing...');

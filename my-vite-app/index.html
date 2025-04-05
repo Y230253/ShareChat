@@ -2,20 +2,27 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <!-- SVGへの参照を変更 -->
-    <link rel="icon" type="image/svg+xml" href="vite.svg" />
+    <!-- SVG参照を相対パスに変更 -->
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <!-- アセットの直接参照を保証するためのスクリプト -->
+    <!-- アセットの直接参照を保証するためのスクリプト改良 -->
     <script>
       window.ASSET_BASE_PATH = '';
       try {
         // 認証URLの場合はフルパスを使用
-        if (location.href.includes('apidata.googleusercontent.com')) {
+        if (location.href.includes('apidata.googleusercontent.com') || 
+            location.href.includes('storage.googleapis.com')) {
+          // Cloud Storageのバケット内のパスを正確に指定
           window.ASSET_BASE_PATH = 'https://storage.googleapis.com/sharechat-media-bucket/frontend/';
-          console.log('認証URL検出: フルパスを使用');
+          console.log('認証URL検出: フルパスを使用', window.ASSET_BASE_PATH);
+          
+          // 動的にベースタグを追加してすべての相対パスの解決を助ける
+          const baseTag = document.createElement('base');
+          baseTag.href = window.ASSET_BASE_PATH;
+          document.head.prepend(baseTag);
         }
       } catch (e) {
         console.error('パス検出エラー:', e);
@@ -26,6 +33,6 @@
   <body>
     <div id="app"></div>
     <!-- スクリプトの参照を変更 -->
-    <script type="module" src="src/main.js"></script>
+    <script type="module" src="/src/main.js"></script>
   </body>
 </html>

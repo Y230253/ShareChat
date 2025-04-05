@@ -5,7 +5,7 @@ import PostForm from '../src/pages/PostForm.vue'
 import UserRegister from '../src/pages/UserRegister.vue'
 import Login from '../src/pages/Login.vue'
 import Tags from '../src/pages/Tags.vue'
-import DetailPost from '../src/pages/DetailPost.vue'
+import DetailPost from '../src/pages/detailPost.vue'
 
 // キャッシュバスティング用のタイムスタンプ
 const buildTimestamp = new Date().getTime()

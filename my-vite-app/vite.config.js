@@ -36,5 +36,11 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/api/, '')
       }
     }
+  },
+  // 絶対パス解決の設定を追加
+  resolve: {
+    alias: {
+      '@': '/src'
+    },
   }
 })
