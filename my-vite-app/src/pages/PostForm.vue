@@ -138,7 +138,7 @@ import { useRouter } from 'vue-router';
 import Header from '../components/header.vue';
 import Sidebar from '../components/Sidebar.vue';
 import authStore from '../authStore.js';
-import { apiCall, api, uploadFile } from '../services/api.js';
+import { apiCall, api, uploadFile, uploadLargeFile } from '../services/api.js';
 import { mockTags } from '../services/mock-data.js';
 
 const router = useRouter();
@@ -253,45 +253,48 @@ const handleFile = async (file) => {
   // 動画かどうかを判定
   isVideo.value = validVideoTypes.includes(file.type);
   
-  // ファイルサイズを表示
+  // ファイルサイズをログに表示
   const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
   console.log(`ファイルサイズ: ${fileSizeMB}MB (${file.size}バイト)`);
 
-  // 大容量ファイル（100MB超）の場合は警告を表示
-  const largeFileThreshold = 100 * 1024 * 1024; // 100MB
-  if (file.size > largeFileThreshold) {
-    console.log('大容量ファイルが選択されました。通常アップロードを使用します（チャンクアップロードはまだ準備中です）');
-  }
-  
-  // ローカルプレビュー
-  // 大きすぎるファイルはオブジェクトURLを使ってメモリ節約
-  if (file.size > 50 * 1024 * 1024) { // 50MB以上
-    filePreview.value = URL.createObjectURL(file);
-  } else {
-    // 小さいファイルは従来通りDataURLを使用
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      filePreview.value = e.target.result;
-    };
-    reader.readAsDataURL(file);
-  }
-  
   try {
-    // アップロード処理
+    // ローカルプレビュー - 大きなファイルはオブジェクトURLを使用して効率化
+    if (file.size > 50 * 1024 * 1024) { // 50MB以上
+      filePreview.value = URL.createObjectURL(file);
+    } else {
+      // 小さいファイルはDataURLを使用
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        filePreview.value = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+    
+    // アップロード処理開始
     uploading.value = true;
     uploadProgress.value = 0;
     
-    // アップロード進捗
+    // アップロード進捗コールバック
     const onProgress = (progress) => {
       uploadProgress.value = Math.round(progress);
     };
     
-    // 実際のアップロード - チャンクアップロードはバックエンド実装が必要なため、一時的に通常のアップロードを使用
-    const result = await api.upload(file, onProgress);
+    // ファイルサイズに応じたアップロード方法の選択
+    let result;
+    const largeFileThreshold = 100 * 1024 * 1024; // 100MB
+    
+    if (file.size > largeFileThreshold) {
+      console.log('大容量ファイルのため、チャンクアップロードを使用します');
+      result = await uploadLargeFile(file, onProgress);
+    } else {
+      console.log('通常のアップロード処理を使用します');
+      result = await api.upload(file, onProgress);
+    }
     
     if (result && result.imageUrl) {
       uploadedFileUrl.value = result.imageUrl;
       isVideo.value = result.isVideo || false;
+      console.log('アップロード成功:', result.imageUrl);
     } else {
       throw new Error('アップロードに失敗しました');
     }
@@ -302,12 +305,12 @@ const handleFile = async (file) => {
   } finally {
     uploading.value = false;
     
-    // オブジェクトURLを使った場合は参照を解放（実際のURLはそのまま）
+    // オブジェクトURLを使った場合はメモリリークを防ぐためにクリーンアップ
     if (filePreview.value && typeof filePreview.value === 'string' && filePreview.value.startsWith('blob:')) {
-      // 参照を変数に保存
+      // 参照を保存
       const blobUrl = filePreview.value;
       
-      // URL.revokeObjectURLはアップロード完了後に呼び出す必要がある
+      // 表示が更新されるまで少し待ってからURLを解放
       setTimeout(() => {
         URL.revokeObjectURL(blobUrl);
       }, 1000);
@@ -320,7 +323,7 @@ const removeFile = () => {
   filePreview.value = null;
   uploadedFileUrl.value = '';
   isVideo.value = false;
-  
+
   // input要素をリセット
   if (fileInput.value) {
     fileInput.value.value = '';
@@ -330,13 +333,12 @@ const removeFile = () => {
 // タグの追加
 const addTag = () => {
   const tag = tagInput.value.trim();
-  
+    
   if (tag && !selectedTags.value.includes(tag)) {
     if (selectedTags.value.length >= 10) {
       fileError.value = 'タグは最大10個までです';
       return;
-    }
-    
+    } 
     selectedTags.value.push(tag);
     tagInput.value = '';
   }
@@ -358,7 +360,6 @@ const selectPopularTag = (tagName) => {
       fileError.value = 'タグは最大10個までです';
       return;
     }
-    
     selectedTags.value.push(tagName);
   }
 };
@@ -383,7 +384,6 @@ const submitForm = async () => {
     
     // 認証チェック
     console.log('認証トークン存在チェック:', localStorage.getItem('token') ? '存在します' : '存在しません');
-    
     if (!localStorage.getItem('token')) {
       errorMsg.value = '認証トークンがありません。再ログインしてください。';
       setTimeout(() => router.push('/login'), 2000);
@@ -413,7 +413,6 @@ const submitForm = async () => {
     setTimeout(() => {
       router.push('/');
     }, 1500);
-    
   } catch (error) {
     console.error('投稿エラー:', error);
     errorMsg.value = `投稿に失敗しました: ${error.message}`;
@@ -482,6 +481,7 @@ h2 {
   display: flex;
   flex-direction: column;
   align-items: center;
+  text-align: center;
 }
 
 .upload-placeholder .icon {

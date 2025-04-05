@@ -1,16 +1,16 @@
 {
   "name": "sharechat-backend",
   "version": "1.0.0",
-  "description": "ShareChat application backend",
+  "description": "ShareChat backend server",
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
+    "start": "node cloud-run-start.js",
     "dev": "nodemon server.js",
-    "build": "echo \"No build step required for Node.js backend\" && exit 0"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "@google-cloud/storage": "^7.7.0",
+    "@google-cloud/storage": "^6.12.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
@@ -20,10 +20,10 @@
     "stream": "^0.0.2"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2"
+    "nodemon": "^3.0.1"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=16.0.0"
   },
   "author": "",
   "license": "ISC"

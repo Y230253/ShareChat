@@ -10,6 +10,7 @@ const router = useRouter();
 const route = useRoute();
 const isSidebarOpen = ref(false);
 const loading = ref(true);
+const tagsLoading = ref(true);
 const error = ref('');
 const tags = ref([]);
 const selectedTag = ref('');
@@ -26,10 +27,12 @@ const toggleSidebar = () => {
 
 // タグ一覧を取得
 const fetchTags = async () => {
+  tagsLoading.value = true;
+  
   try {
     console.log('タグ一覧を取得中...');
     const response = await api.tags.getAll();
-    console.log('タグAPIレスポンス:', response);
+    console.log('取得したタグデータ:', response);
     
     if (Array.isArray(response)) {
       tags.value = response;
@@ -42,6 +45,8 @@ const fetchTags = async () => {
     console.error("タグ取得エラー:", err);
     error.value = "タグの取得に失敗しました";
     tags.value = [];
+  } finally {
+    tagsLoading.value = false;
   }
 };
 
@@ -58,7 +63,7 @@ const fetchPostsByTag = async (tagName) => {
   
   try {
     console.log(`タグ「${tagName}」で投稿を検索します`);
-    // 新しく追加したAPIメソッドを使用
+    // posts-by-tag エンドポイントを使用
     const posts = await api.tags.getPostsByTag(tagName);
     
     if (Array.isArray(posts)) {
@@ -129,8 +134,8 @@ watch(tagFromUrl, async (newTag) => {
         
         <!-- タグ一覧 -->
         <div class="tag-container">
-          <div v-if="loading && tags.length === 0" class="loading">
-            <div class="spinner"></div>
+          <div v-if="tagsLoading" class="tag-loading">
+            <div class="spinner small-spinner"></div>
             <p>タグを読み込み中...</p>
           </div>
           
@@ -234,12 +239,12 @@ h2 {
   border-color: #42b983;
 }
 
-.loading {
+.loading, .tag-loading {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  margin: 50px 0;
+  margin: 20px 0;
 }
 
 .spinner {
@@ -250,6 +255,12 @@ h2 {
   border-top-color: #42b983;
   animation: spin 1s linear infinite;
   margin-bottom: 15px;
+}
+
+.small-spinner {
+  width: 20px;
+  height: 20px;
+  border-width: 2px;
 }
 
 @keyframes spin {

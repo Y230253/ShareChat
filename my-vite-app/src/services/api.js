@@ -297,4 +297,80 @@ export const api = {
   }
 };
 
+// 大容量ファイルアップロード処理関数
+export async function uploadLargeFile(file, onProgress) {
+  console.log(`大容量ファイル処理: ${file.name}、サイズ: ${(file.size / (1024 * 1024)).toFixed(2)}MB`);
+  
+  const chunkSize = 5 * 1024 * 1024; // 5MBずつ
+  const totalChunks = Math.ceil(file.size / chunkSize);
+  const sessionId = Date.now().toString() + '-' + Math.random().toString(36).substring(2, 15);
+  
+  try {
+    // セッション開始
+    console.log(`アップロードセッション作成: ${totalChunks}チャンク`);
+    const sessionResponse = await api.uploadSession.create({
+      filename: file.name,
+      fileType: file.type,
+      fileSize: file.size,
+      sessionId: sessionId,
+      totalChunks: totalChunks
+    });
+    
+    if (!sessionResponse || !sessionResponse.success) {
+      throw new Error('アップロードセッション作成に失敗しました');
+    }
+    
+    // チャンク送信
+    let uploadedChunks = 0;
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * chunkSize;
+      const end = Math.min(start + chunkSize, file.size);
+      const chunk = file.slice(start, end);
+      
+      const formData = new FormData();
+      formData.append('chunk', chunk);
+      formData.append('sessionId', sessionId);
+      formData.append('chunkIndex', i);
+      formData.append('totalChunks', totalChunks);
+      
+      // チャンクをアップロード
+      const response = await fetch(`${API_BASE_URL}/upload-chunk`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`チャンク${i+1}/${totalChunks}のアップロードに失敗: ${errorText}`);
+      }
+      
+      // 進捗更新
+      uploadedChunks++;
+      if (onProgress) {
+        onProgress((uploadedChunks / totalChunks) * 100);
+      }
+    }
+    
+    // 完了通知
+    console.log('全チャンクアップロード完了、結合処理を開始します');
+    const completeResponse = await api.uploadSession.complete(sessionId);
+    
+    return completeResponse;
+  } catch (error) {
+    console.error('大容量アップロードエラー:', error);
+    
+    // エラー時はセッション中止
+    try {
+      await api.uploadSession.abort(sessionId);
+    } catch (abortError) {
+      console.error('セッション中止エラー:', abortError);
+    }
+    
+    throw error;
+  }
+}
+
 export default api;

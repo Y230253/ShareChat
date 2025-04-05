@@ -5,11 +5,13 @@ import bcrypt from 'bcryptjs';
 import cors from 'cors';
 import multer from 'multer';
 import path from 'path';
-import fs from 'fs/promises';
+import fs from 'fs/promises';   // fs/promisesをインポート
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { Storage } from '@google-cloud/storage';
 import stream from 'stream';
+// fsの通常モジュールも追加 (existsSyncなどのために必要)
+import * as fsSync from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -503,7 +505,7 @@ app.post('/register', upload.single('icon'), async (req, res) => {
     }
     
     const newUser = {
-      id: userData.users.length ? userData.users[userData.users.length - 1].id + 1 : 1,
+      id: userData.users.length ? userData.users[userData.users[userData.users.length - 1].id + 1 ]: 1,
       username,
       email,
       password: hashedPassword,
@@ -1207,10 +1209,20 @@ app.get('/posts-by-tag/:tagName', async (req, res) => {
   }
 });
 
+// すべての他のリクエストをindex.htmlにリダイレクト（SPAルーティング用）
+// ※必ず他のルートの最後に配置
+app.get('*', (req, res) => {
+  // APIリクエストの場合は処理しない
+  if (req.path.startsWith('/api/') || req.path === '/health') {
+    return res.status(404).json({ error: 'APIエンドポイントが見つかりません' });
+  }
+  res.sendFile(path.join(__dirname, '../dist/index.html'));
+});
+
 // 大容量ファイルのアップロード用の一時ディレクトリ
 const tempUploadsDir = path.join(__dirname, 'temp_uploads');
-if (!fs.existsSync(tempUploadsDir)) {
-  fs.mkdirSync(tempUploadsDir, { recursive: true });
+if (!fsSync.existsSync(tempUploadsDir)) {  // fsSync を使用
+  fsSync.mkdirSync(tempUploadsDir, { recursive: true });
 }
 
 // アップロードセッションの管理
@@ -1231,8 +1243,8 @@ app.post('/upload-session', authenticateToken, (req, res) => {
   const sessionDir = path.join(tempUploadsDir, `${userId}_${sessionId}`);
   
   try {
-    if (!fs.existsSync(sessionDir)) {
-      fs.mkdirSync(sessionDir, { recursive: true });
+    if (!fsSync.existsSync(sessionDir)) {  // fsSync を使用
+      fsSync.mkdirSync(sessionDir, { recursive: true });  // fsSync を使用
     }
     
     // セッション情報を保存
@@ -1273,7 +1285,7 @@ const chunkUpload = multer({
       cb(null, `chunk_${chunkIndex}`);
     }
   }),
-  limits: { fileSize: 5 * 1024 * 1024 } // 各チャンク5MB上限
+  limits: { fileSize: 10 * 1024 * 1024 } // 各チャンク10MB上限
 });
 
 app.post('/upload-chunk', authenticateToken, (req, res) => {
@@ -1335,21 +1347,21 @@ app.post('/upload-session/complete', authenticateToken, async (req, res) => {
     const finalLocalPath = path.join(tempUploadsDir, finalFileName);
     
     // ファイルストリーム作成
-    const outputStream = fs.createWriteStream(finalLocalPath);
+    const outputStream = fsSync.createWriteStream(finalLocalPath);
     
     // チャンクを順番に結合
     for (let i = 0; i < session.totalChunks; i++) {
       const chunkPath = path.join(session.sessionDir, `chunk_${i}`);
       
       await new Promise((resolve, reject) => {
-        const chunkStream = fs.createReadStream(chunkPath);
+        const chunkStream = fsSync.createReadStream(chunkPath);
         chunkStream.pipe(outputStream, { end: false });
         chunkStream.on('end', resolve);
         chunkStream.on('error', reject);
       });
       
       // 処理済みのチャンクを削除
-      fs.unlinkSync(chunkPath);
+      fsSync.unlinkSync(chunkPath);
     }
     
     // すべてのチャンクの書き込み完了
@@ -1363,7 +1375,7 @@ app.post('/upload-session/complete', authenticateToken, async (req, res) => {
     
     // Cloud Storageにアップロード
     const file = bucket.file(filePath);
-    const fileBuffer = fs.readFileSync(finalLocalPath);
+    const fileBuffer = fsSync.readFileSync(finalLocalPath);
     
     await new Promise((resolve, reject) => {
       const blobStream = file.createWriteStream({
@@ -1385,8 +1397,8 @@ app.post('/upload-session/complete', authenticateToken, async (req, res) => {
     console.log(`セッション ${sessionId}: Cloud Storageへのアップロード完了`);
     
     // ローカルの一時ファイルを削除
-    fs.unlinkSync(finalLocalPath);
-    fs.rmdirSync(session.sessionDir, { recursive: true });
+    fsSync.unlinkSync(finalLocalPath);
+    fsSync.rmdirSync(session.sessionDir, { recursive: true });
     
     // セッション情報を削除
     delete uploadSessions[sessionId];
@@ -1402,7 +1414,7 @@ app.post('/upload-session/complete', authenticateToken, async (req, res) => {
     
     // エラー時にも一時ファイルを削除
     try {
-      fs.rmdirSync(session.sessionDir, { recursive: true });
+      fsSync.rmdirSync(session.sessionDir, { recursive: true });
     } catch (cleanupError) {
       console.error('一時ファイル削除エラー:', cleanupError);
     }
@@ -1423,7 +1435,7 @@ app.post('/upload-session/abort', authenticateToken, (req, res) => {
   
   try {
     // セッションディレクトリとファイルを削除
-    fs.rmdirSync(session.sessionDir, { recursive: true });
+    fsSync.rmdirSync(session.sessionDir, { recursive: true });
     delete uploadSessions[sessionId];
     
     console.log(`セッション ${sessionId}: ユーザーによる中止`);
@@ -1446,7 +1458,7 @@ setInterval(() => {
       console.log(`古いセッション ${sessionId} を削除します`);
       
       try {
-        fs.rmdirSync(session.sessionDir, { recursive: true });
+        fsSync.rmdirSync(session.sessionDir, { recursive: true });
       } catch (error) {
         console.error(`セッション ${sessionId} クリーンアップエラー:`, error);
       }
@@ -1455,16 +1467,6 @@ setInterval(() => {
     }
   }
 }, 3600000); // 1時間ごとに実行
-
-// すべての他のリクエストをindex.htmlにリダイレクト（SPAルーティング用）
-// ※必ず他のルートの最後に配置
-app.get('*', (req, res) => {
-  // APIリクエストの場合は処理しない
-  if (req.path.startsWith('/api/') || req.path === '/health') {
-    return res.status(404).json({ error: 'APIエンドポイントが見つかりません' });
-  }
-  res.sendFile(path.join(__dirname, '../dist/index.html'));
-});
 
 // サーバー起動時にデータ構造を確認
 const PORT = process.env.PORT || 8080;
@@ -1482,7 +1484,7 @@ app.listen(PORT, async () => {
   console.log('  POST /upload: メディアアップロード');
   
   try {
-    // バケットアクセス確認
+    // バケットアクセス確認 (エラーでもサーバー起動は続行)
     if (!bucket) {
       console.error('警告: バケットオブジェクトが初期化されていません');
       return;
@@ -1490,24 +1492,33 @@ app.listen(PORT, async () => {
 
     console.log('Cloud Storageバケットのアクセス確認中...');
     
-    // Cloud Storageに初期データファイルが存在するか確認
-    const [dataFileExists] = await bucket.file(dataFilePath).exists();
-    const [userDataFileExists] = await bucket.file(userDataFilePath).exists();
-    
-    console.log(`データファイルの存在確認: PhotoData.json=${dataFileExists}, UserData.json=${userDataFileExists}`);
-    
-    // データファイルがない場合は初期データを作成
-    if (!dataFileExists) {
-      console.log('PhotoData.jsonが存在しないため初期化します');
-      await writeData({ users: [], posts: [], likes: [], bookmarks: [], comments: [], tags: [] });
+    try {
+      // バケット情報を取得（アクセス権限の確認）
+      const [bucketInfo] = await bucket.getMetadata();
+      console.log(`バケット名: ${bucketInfo.name}, 作成日: ${bucketInfo.timeCreated}`);
+
+      // Cloud Storageに初期データファイルが存在するか確認
+      const [dataFileExists] = await bucket.file(dataFilePath).exists();
+      const [userDataFileExists] = await bucket.file(userDataFilePath).exists();
+      
+      console.log(`データファイルの存在確認: PhotoData.json=${dataFileExists}, UserData.json=${userDataFileExists}`);
+      
+      // データファイルがない場合は初期データを作成
+      if (!dataFileExists) {
+        console.log('PhotoData.jsonが存在しないため初期化します');
+        await writeData({ users: [], posts: [], likes: [], bookmarks: [], comments: [], tags: [] });
+      }
+      
+      if (!userDataFileExists) {
+        console.log('UserData.jsonが存在しないため初期化します');
+        await writeUserData({ users: [] });
+      }
+      
+      console.log('データファイル確認完了、サーバー準備完了');
+    } catch (checkErr) {
+      console.error('バケット接続確認エラー:', checkErr);
+      console.log('バケット接続エラーがありますが、サーバー起動は続行します');
     }
-    
-    if (!userDataFileExists) {
-      console.log('UserData.jsonが存在しないため初期化します');
-      await writeUserData({ users: [] });
-    }
-    
-    console.log('データファイル確認完了、サーバー起動準備完了');
   } catch (err) {
     console.error('データ構造確認エラー:', err);
     console.error('警告: データファイルの初期化に失敗しましたが、サーバーは起動します');

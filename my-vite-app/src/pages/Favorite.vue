@@ -22,6 +22,7 @@
           </button>
         </div>
         
+        <!-- ブックマークした投稿だけを表示 -->
         <PhotoList v-else :photos="bookmarkedPosts" />
       </div>
     </div>
@@ -61,11 +62,12 @@ const fetchBookmarkedPosts = async () => {
   
   try {
     console.log('ブックマークした投稿を取得中...');
+    // ブックマーク済み投稿だけを取得するAPIを使用
     const posts = await api.bookmarks.getPosts();
     
-    // BookmarkPostsの結果のみを使用する（/postsを別途呼び出さない）
+    // 重要: ここで別のポストを取得しないように注意
     bookmarkedPosts.value = posts;
-    console.log(`ブックマークされた投稿を${bookmarkedPosts.value.length}件取得しました`);
+    console.log(`ブックマークされた投稿を${posts.length}件取得しました`);
   } catch (err) {
     console.error("ブックマーク投稿取得エラー:", err);
     error.value = "お気に入り投稿の取得に失敗しました";
@@ -75,23 +77,26 @@ const fetchBookmarkedPosts = async () => {
   }
 };
 
-// 認証状態変更時のリスナー設定
 onMounted(() => {
   fetchBookmarkedPosts();
   
-  // 認証状態変更のリスナーを設定
-  authChangeUnsubscribe = authStore.on?.('auth-change', (state) => {
-    console.log('認証状態変更を検出:', state);
-    if (state.isLoggedIn) {
-      fetchBookmarkedPosts();
-    } else {
-      bookmarkedPosts.value = [];
-      error.value = 'お気に入りを表示するにはログインが必要です';
-    }
-  });
+  // 認証状態変更時の処理
+  if (typeof authStore.on === 'function') {
+    authChangeUnsubscribe = authStore.on('auth-change', (state) => {
+      console.log('認証状態変更検出:', state.isLoggedIn);
+      if (state.isLoggedIn) {
+        fetchBookmarkedPosts();
+      } else {
+        bookmarkedPosts.value = [];
+        error.value = 'お気に入りを表示するにはログインが必要です';
+      }
+    });
+  } else {
+    console.warn('authStore.onメソッドが利用できません');
+  }
 });
 
-// コンポーネント破棄時にリスナーを削除
+// コンポーネント破棄時の処理
 onUnmounted(() => {
   if (authChangeUnsubscribe) {
     authChangeUnsubscribe();
