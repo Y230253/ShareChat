@@ -1,53 +1,38 @@
 <template>
-  <div class="App">
-    <Header :toggleSidebar="toggleSidebar" />
+  <div>
+    <h1>お気に入り</h1>
     
-    <div class="main-wrapper">
-      <Sidebar :isOpen="isSidebarOpen" />
-      
-      <div :class="['content', { 'with-sidebar': isSidebarOpen }]">
-        <h1>お気に入り</h1>
-        
-        <div v-if="error" class="error-message">{{ error }}</div>
-        
-        <div v-else-if="loading" class="loading">
-          <div class="spinner"></div>
-          <p>お気に入りを読み込み中...</p>
-        </div>
-        
-        <div v-else-if="bookmarkedPosts.length === 0" class="no-content">
-          <p>まだお気に入りに追加された投稿はありません。</p>
-          <button @click="router.push('/')" class="home-btn">
-            投稿を見る
-          </button>
-        </div>
-        
-        <!-- ブックマークした投稿だけを表示 -->
-        <PhotoList v-else :photos="bookmarkedPosts" />
-      </div>
+    <div v-if="error" class="error-message">{{ error }}</div>
+    
+    <div v-else-if="loading" class="loading">
+      <div class="spinner"></div>
+      <p>お気に入りを読み込み中...</p>
     </div>
+    
+    <div v-else-if="bookmarkedPosts.length === 0" class="no-content">
+      <p>まだお気に入りに追加された投稿はありません。</p>
+      <button @click="router.push('/')" class="home-btn">
+        投稿を見る
+      </button>
+    </div>
+    
+    <!-- ブックマークした投稿だけを表示 -->
+    <PhotoList v-else :photos="bookmarkedPosts" />
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
-import Header from '../components/header.vue';
-import Sidebar from '../components/Sidebar.vue';
 import PhotoList from '../components/PhotoList.vue';
 import authStore from '../authStore.js';
 import { api } from '../services/api.js';
 
 const router = useRouter();
-const isSidebarOpen = ref(false);
 const bookmarkedPosts = ref([]);
 const loading = ref(true);
 const error = ref('');
 let authChangeUnsubscribe = null;
-
-const toggleSidebar = () => {
-  isSidebarOpen.value = !isSidebarOpen.value;
-};
 
 const fetchBookmarkedPosts = async () => {
   // ログイン確認
@@ -105,31 +90,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.main-wrapper {
-  display: flex;
-  flex: 1;
-  margin-top: 60px; /* ヘッダーの高さ分 */
-}
-
-.content {
-  flex: 1;
-  overflow-y: auto;
-  min-height: 0;
-  transition: margin-left 0.3s;
-  margin-left: 0;
-  padding: 20px;
-}
-
-.content.with-sidebar {
-  margin-left: 220px;
-}
-
-h1 {
-  color: #2c3e50;
-  margin-bottom: 30px;
-  font-size: 24px;
-}
-
 .loading {
   display: flex;
   flex-direction: column;

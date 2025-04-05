@@ -1,147 +1,141 @@
 <template>
-  <div class="App">
-    <Header :toggleSidebar="toggleSidebar" />
-    <div class="main-wrapper">
-      <Sidebar :isOpen="isSidebarOpen" />
-      <div class="detail-post" v-if="post">
-        <!-- 戻るボタン -->
-        <button class="back-button" @click="goBack">← 戻る</button>
-        
-        <!-- ユーザー情報 -->
-        <div class="user-info">
-          <div class="user-icon-container">
-            <img :src="userIconUrl" class="user-icon" alt="User Icon">
-          </div>
-          <div>
-            <p class="username">{{ post.username || ('ユーザー ' + post.user_id) }}</p>
-            <p class="date">{{ new Date(post.created_at).toLocaleString('ja-JP') }}</p>
-          </div>
-        </div>
-        
-        <!-- メディアコンテナ -->
-        <div class="media-container" @click="openMediaModal">
-          <!-- 動画の場合 -->
-          <video 
-            v-if="post.isVideo" 
-            ref="mediaRef"
-            :src="post.image_url" 
-            class="media"
-            controls
-            autoplay
-            loop
-          ></video>
-          
-          <!-- 画像の場合 -->
-          <img 
-            v-else 
-            :src="post.image_url" 
-            class="media"
-            alt="Uploaded Photo"
-          >
-          
-          <div class="view-full-btn">クリックで拡大表示</div>
-        </div>
-        
-        <!-- メッセージ表示をより読みやすく -->
-        <div class="message-container">
-          <p class="message">{{ post.message }}</p>
-        </div>
-        
-        <!-- タグ表示 -->
-        <div v-if="post.tags && post.tags.length > 0" class="tags-container">
-          <h4>タグ</h4>
-          <div class="tags">
-            <router-link 
-              v-for="tag in post.tags" 
-              :key="tag" 
-              :to="`/tags?tag=${encodeURIComponent(tag)}`"
-              class="tag"
-            >
-              #{{ tag }}
-            </router-link>
-          </div>
-        </div>
-        
-        <!-- アクションボタン -->
-        <div class="action-bar">
-          <button @click="toggleLike" :class="{ 'active': liked }">
-            {{ liked ? '❤️' : '🤍' }} いいね {{ likeCount }}
-          </button>
-          <button @click="toggleBookmark" :class="{ 'active': isBookmarked }">
-            {{ isBookmarked ? '📌' : '🔖' }} ブックマーク {{ bookmarkCount }}
-          </button>
-          <button @click="focusCommentInput">
-            💬 コメント {{ commentCount }}
-          </button>
-          <button @click="sharePost">
-            🔗 シェア
-          </button>
-        </div>
-        
-        <!-- コメント一覧 -->
-        <div class="comment-section">
-          <h3>コメント</h3>
-          <div class="comments-list">
-            <div v-if="comments.length === 0" class="no-comments">
-              まだコメントはありません
-            </div>
-            <div v-for="comment in comments" :key="comment.id" class="comment">
-              <div class="comment-user">
-                <img :src="comment.user_icon || 'https://via.placeholder.com/30'" alt="User" class="comment-user-icon">
-                <span class="comment-username">{{ comment.username }}</span>
-              </div>
-              <p class="comment-text">{{ comment.text }}</p>
-              <span class="comment-date">{{ new Date(comment.created_at).toLocaleString('ja-JP') }}</span>
-            </div>
-          </div>
-          
-          <!-- コメント投稿フォーム -->
-          <div v-if="isLoggedIn" class="comment-form">
-            <textarea 
-              ref="commentInput"
-              v-model="newComment" 
-              placeholder="コメントを入力..."
-              rows="2"
-            ></textarea>
-            <button @click="submitComment" :disabled="!newComment.trim()">送信</button>
-          </div>
-          <div v-else class="login-prompt">
-            <p>コメントするには<router-link to="/login">ログイン</router-link>してください</p>
-          </div>
-        </div>
+  <div class="detail-post" v-if="post">
+    <!-- 戻るボタン -->
+    <button class="back-button" @click="goBack">← 戻る</button>
+    
+    <!-- ユーザー情報 -->
+    <div class="user-info">
+      <div class="user-icon-container">
+        <img :src="userIconUrl" class="user-icon" alt="User Icon">
       </div>
-      
-      <!-- ローディング表示 -->
-      <div v-else-if="loading" class="loading">
-        <div class="spinner"></div>
-        <p>読み込み中...</p>
-      </div>
-      
-      <!-- エラー表示 -->
-      <div v-else class="error">
-        <p>{{ error || '投稿が見つかりませんでした' }}</p>
-        <button @click="goBack">戻る</button>
+      <div>
+        <p class="username">{{ post.username || ('ユーザー ' + post.user_id) }}</p>
+        <p class="date">{{ new Date(post.created_at).toLocaleString('ja-JP') }}</p>
       </div>
     </div>
     
-    <!-- メディアモーダル -->
-    <div v-if="showMediaModal" class="media-modal" @click="closeMediaModal">
-      <div class="modal-content">
-        <button class="close-modal" @click.stop="closeMediaModal">×</button>
-        <video 
-          v-if="post && post.isVideo" 
-          :src="post.image_url"
-          controls
-          autoplay
-          class="modal-media"
-        ></video>
-        <img 
-          v-else-if="post"
-          :src="post.image_url" 
-          class="modal-media"
-          alt="Full size media"
+    <!-- メディアコンテナ -->
+    <div class="media-container" @click="openMediaModal">
+      <!-- 動画の場合 -->
+      <video 
+        v-if="post.isVideo" 
+        ref="mediaRef"
+        :src="post.image_url" 
+        class="media"
+        controls
+        autoplay
+        loop
+      ></video>
+      
+      <!-- 画像の場合 -->
+      <img 
+        v-else 
+        :src="post.image_url" 
+        class="media"
+        alt="Uploaded Photo"
+      >
+      
+      <div class="view-full-btn">クリックで拡大表示</div>
+    </div>
+    
+    <!-- メッセージ表示をより読みやすく -->
+    <div class="message-container">
+      <p class="message">{{ post.message }}</p>
+    </div>
+    
+    <!-- タグ表示 -->
+    <div v-if="post.tags && post.tags.length > 0" class="tags-container">
+      <h4>タグ</h4>
+      <div class="tags">
+        <router-link 
+          v-for="tag in post.tags" 
+          :key="tag" 
+          :to="`/tags?tag=${encodeURIComponent(tag)}`"
+          class="tag"
         >
+          #{{ tag }}
+        </router-link>
       </div>
+    </div>
+    
+    <!-- アクションボタン -->
+    <div class="action-bar">
+      <button @click="toggleLike" :class="{ 'active': liked }">
+        {{ liked ? '❤️' : '🤍' }} いいね {{ likeCount }}
+      </button>
+      <button @click="toggleBookmark" :class="{ 'active': isBookmarked }">
+        {{ isBookmarked ? '📌' : '🔖' }} ブックマーク {{ bookmarkCount }}
+      </button>
+      <button @click="focusCommentInput">
+        💬 コメント {{ commentCount }}
+      </button>
+      <button @click="sharePost">
+        🔗 シェア
+      </button>
+    </div>
+    
+    <!-- コメント一覧 -->
+    <div class="comment-section">
+      <h3>コメント</h3>
+      <div class="comments-list">
+        <div v-if="comments.length === 0" class="no-comments">
+          まだコメントはありません
+        </div>
+        <div v-for="comment in comments" :key="comment.id" class="comment">
+          <div class="comment-user">
+            <img :src="comment.user_icon || 'https://via.placeholder.com/30'" alt="User" class="comment-user-icon">
+            <span class="comment-username">{{ comment.username }}</span>
+          </div>
+          <p class="comment-text">{{ comment.text }}</p>
+          <span class="comment-date">{{ new Date(comment.created_at).toLocaleString('ja-JP') }}</span>
+        </div>
+      </div>
+      
+      <!-- コメント投稿フォーム -->
+      <div v-if="isLoggedIn" class="comment-form">
+        <textarea 
+          ref="commentInput"
+          v-model="newComment" 
+          placeholder="コメントを入力..."
+          rows="2"
+        ></textarea>
+        <button @click="submitComment" :disabled="!newComment.trim()">送信</button>
+      </div>
+      <div v-else class="login-prompt">
+        <p>コメントするには<router-link to="/login">ログイン</router-link>してください</p>
+      </div>
+    </div>
+  </div>
+  
+  <!-- ローディング表示 -->
+  <div v-else-if="loading" class="loading">
+    <div class="spinner"></div>
+    <p>読み込み中...</p>
+  </div>
+  
+  <!-- エラー表示 -->
+  <div v-else class="error">
+    <p>{{ error || '投稿が見つかりませんでした' }}</p>
+    <button @click="goBack">戻る</button>
+  </div>
+  
+  <!-- メディアモーダル -->
+  <div v-if="showMediaModal" class="media-modal" @click="closeMediaModal">
+    <div class="modal-content">
+      <button class="close-modal" @click.stop="closeMediaModal">×</button>
+      <video 
+        v-if="post && post.isVideo" 
+        :src="post.image_url"
+        controls
+        autoplay
+        class="modal-media"
+      ></video>
+      <img 
+        v-else-if="post"
+        :src="post.image_url" 
+        class="modal-media"
+        alt="Full size media"
+      >
     </div>
   </div>
 </template>
@@ -149,8 +143,6 @@
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import Header from '../components/header.vue';
-import Sidebar from '../components/Sidebar.vue';
 import authStore from '../authStore.js';
 import { apiCall } from '../services/api.js';
 
@@ -161,7 +153,6 @@ const postId = computed(() => Number(route.params.id));
 const post = ref(null);
 const loading = ref(true);
 const error = ref(null);
-const isSidebarOpen = ref(false);
 const mediaRef = ref(null);
 const commentInput = ref(null);
 const showMediaModal = ref(false);
@@ -183,11 +174,6 @@ const apiUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.sharechat-app.c
 // ユーザー情報
 const isLoggedIn = computed(() => authStore.isLoggedIn.value);
 const userIconUrl = computed(() => post.value?.user_icon || 'https://via.placeholder.com/40');
-
-// サイドバー切替
-const toggleSidebar = () => {
-  isSidebarOpen.value = !isSidebarOpen.value;
-};
 
 // 戻るボタン
 const goBack = () => {
@@ -387,7 +373,7 @@ onMounted(() => {
 <style scoped>
 .detail-post {
   max-width: 600px;
-  margin: 80px auto 20px;
+  margin: 0 auto 20px;
   padding: 20px;
   background-color: white;
   border-radius: 12px;

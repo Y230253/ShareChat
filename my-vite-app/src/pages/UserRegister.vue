@@ -1,99 +1,91 @@
 <template>
-  <div class="App">
-    <Header :toggleSidebar="toggleSidebar" />
-    <div class="main-wrapper">
-      <Sidebar :isOpen="isSidebarOpen" />
-      <div class="user-register-container">
-        <form @submit.prevent="handleRegister" class="register-form" enctype="multipart/form-data">
-          <h1>ユーザー登録</h1>
-          
-          <div class="form-group">
-            <label for="icon">プロフィール画像</label>
-            <input
-              id="icon"
-              type="file"
-              @change="handleIconChange"
-              accept="image/*"
-            />
-            <div v-if="iconPreview" class="icon-preview">
-              <img :src="iconPreview" alt="アイコンプレビュー" />
-            </div>
-          </div>
-          
-          <div class="form-group">
-            <label for="username">ユーザーネーム</label>
-            <input
-              id="username"
-              type="text"
-              v-model="username"
-              placeholder="ユーザーネームを入力"
-              autocomplete="username"
-              required
-            />
-          </div>
-          
-          <div class="form-group">
-            <label for="email">メールアドレス</label>
-            <input
-              id="email"
-              type="email"
-              v-model="email"
-              placeholder="メールアドレスを入力"
-              autocomplete="email"
-              required
-            />
-          </div>
-          
-          <div class="form-group">
-            <label for="password">パスワード</label>
-            <div class="password-field">
-              <input
-                id="password"
-                :type="showPassword ? 'text' : 'password'"
-                v-model="password"
-                placeholder="半角英数字で8文字以上"
-                autocomplete="new-password"
-                required
-              />
-              <button type="button" class="toggle-password" @click="togglePassword">
-                {{ showPassword ? '🙈' : '👁' }}
-              </button>
-            </div>
-          </div>
-          
-          <div class="form-group">
-            <label for="confirmPassword">パスワード（再確認）</label>
-            <div class="password-field">
-            <input
-              id="confirmPassword"
-              type="password"
-              v-model="confirmPassword"
-              placeholder="パスワードを再入力"
-              autocomplete="new-password"
-              required
-            />
-            <button type="button" class="toggle-password" @click="togglePassword">
-              {{ showPassword ? '🙈' : '👁' }}
-            </button>
-            </div>
-          </div>
-          
-          <button type="submit" class="submit-btn">登録する</button>
-          
-          <div v-if="errorMessage" class="error-message">
-            {{ errorMessage }}
-          </div>
-        </form>
+  <div class="user-register-container">
+    <form @submit.prevent="handleRegister" class="register-form" enctype="multipart/form-data">
+      <h1>ユーザー登録</h1>
+      
+      <div class="form-group">
+        <label for="icon">プロフィール画像</label>
+        <input
+          id="icon"
+          type="file"
+          @change="handleIconChange"
+          accept="image/*"
+        />
+        <div v-if="iconPreview" class="icon-preview">
+          <img :src="iconPreview" alt="アイコンプレビュー" />
+        </div>
       </div>
-    </div>
+      
+      <div class="form-group">
+        <label for="username">ユーザーネーム</label>
+        <input
+          id="username"
+          type="text"
+          v-model="username"
+          placeholder="ユーザーネームを入力"
+          autocomplete="username"
+          required
+        />
+      </div>
+      
+      <div class="form-group">
+        <label for="email">メールアドレス</label>
+        <input
+          id="email"
+          type="email"
+          v-model="email"
+          placeholder="メールアドレスを入力"
+          autocomplete="email"
+          required
+        />
+      </div>
+      
+      <div class="form-group">
+        <label for="password">パスワード</label>
+        <div class="password-field">
+          <input
+            id="password"
+            :type="showPassword ? 'text' : 'password'"
+            v-model="password"
+            placeholder="半角英数字で8文字以上"
+            autocomplete="new-password"
+            required
+          />
+          <button type="button" class="toggle-password" @click="togglePassword">
+            {{ showPassword ? '🙈' : '👁' }}
+          </button>
+        </div>
+      </div>
+      
+      <div class="form-group">
+        <label for="confirmPassword">パスワード（再確認）</label>
+        <div class="password-field">
+        <input
+          id="confirmPassword"
+          type="password"
+          v-model="confirmPassword"
+          placeholder="パスワードを再入力"
+          autocomplete="new-password"
+          required
+        />
+        <button type="button" class="toggle-password" @click="togglePassword">
+          {{ showPassword ? '🙈' : '👁' }}
+        </button>
+        </div>
+      </div>
+      
+      <button type="submit" class="submit-btn">登録する</button>
+      
+      <div v-if="errorMessage" class="error-message">
+        {{ errorMessage }}
+      </div>
+    </form>
   </div>
 </template>
 
 <script setup>
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
-import Header from '../components/header.vue';
-import Sidebar from '../components/Sidebar.vue';
 import { api } from '../services/api'; // APIサービスをインポート
 
 const router = useRouter();
@@ -101,17 +93,12 @@ const username = ref('');
 const email = ref('');
 const password = ref('');
 const confirmPassword = ref('');
-const isSidebarOpen = ref(false);
 const showPassword = ref(false);
 const errorMessage = ref('');
 
 // アイコン画像関連
 const iconFile = ref(null);
 const iconPreview = ref('');
-
-const toggleSidebar = () => {
-  isSidebarOpen.value = !isSidebarOpen.value;
-};
 
 const togglePassword = () => {
   showPassword.value = !showPassword.value;

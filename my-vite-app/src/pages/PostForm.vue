@@ -1,151 +1,137 @@
 <template>
-  <div class="App">
-    <Header :toggleSidebar="toggleSidebar" />
-    <div class="main-wrapper">
-      <Sidebar :isOpen="isSidebarOpen" />
-      <div :class="['content', { 'with-sidebar': isSidebarOpen }]">
-        <div class="post-form-container">
-          <h1>写真・動画投稿フォーム</h1>
+  <div class="post-form-container">
+    <h1>写真・動画投稿フォーム</h1>
+    
+    <div v-if="errorMsg" class="error-message">{{ errorMsg }}</div>
+    <div v-if="successMsg" class="success-message">{{ successMsg }}</div>
+    
+    <form @submit.prevent="submitForm" class="post-form">
+      <div class="form-section">
+        <!-- ファイル選択部分 -->
+        <h2>メディアをアップロード</h2>
+        
+        <div 
+          class="upload-area"
+          :class="{'dragging': isDragging, 'has-preview': filePreview}"
+          @dragover.prevent="handleDragOver"
+          @dragleave.prevent="handleDragLeave"
+          @drop.prevent="handleDrop"
+        >
+          <div v-if="!filePreview && !uploading" class="upload-placeholder">
+            <div class="icon">📷</div>
+            <p>クリックまたはドラッグ＆ドロップで写真や動画をアップロード</p>
+            <p class="hint">対応形式: JPG, PNG, GIF, MP4, MOVなど</p>
+          </div>
           
-          <div v-if="errorMsg" class="error-message">{{ errorMsg }}</div>
-          <div v-if="successMsg" class="success-message">{{ successMsg }}</div>
+          <div v-if="uploading" class="upload-loading">
+            <div class="spinner"></div>
+            <p>アップロード中 ({{ uploadProgress }}%)...</p>
+          </div>
           
-          <form @submit.prevent="submitForm" class="post-form">
-            <!-- ファイルアップロードセクション -->
-            <div class="form-section">
-              <h2>メディアをアップロード</h2>
-              
-              <div 
-                class="upload-area"
-                :class="{'dragging': isDragging, 'has-preview': filePreview}"
-                @dragover.prevent="handleDragOver"
-                @dragleave.prevent="handleDragLeave"
-                @drop.prevent="handleDrop"
-              >
-                <div v-if="!filePreview && !uploading" class="upload-placeholder">
-                  <div class="icon">📷</div>
-                  <p>クリックまたはドラッグ＆ドロップで写真や動画をアップロード</p>
-                  <p class="hint">対応形式: JPG, PNG, GIF, MP4, MOVなど</p>
-                </div>
-                
-                <div v-if="uploading" class="upload-loading">
-                  <div class="spinner"></div>
-                  <p>アップロード中 ({{ uploadProgress }}%)...</p>
-                </div>
-                
-                <div v-else-if="filePreview" class="preview-container">
-                  <!-- 画像プレビュー -->
-                  <img 
-                    v-if="!isVideo" 
-                    :src="filePreview" 
-                    class="image-preview" 
-                    alt="Uploaded preview"
-                  />
-                  
-                  <!-- 動画プレビュー -->
-                  <video 
-                    v-else 
-                    :src="filePreview" 
-                    class="video-preview" 
-                    controls
-                    autoplay
-                    muted
-                    loop
-                  ></video>
-                  
-                  <button type="button" @click="removeFile" class="remove-btn">削除</button>
-                </div>
-                
-                <input 
-                  type="file"
-                  ref="fileInput"
-                  @change="handleFileSelected"
-                  accept="image/*,video/*"
-                  class="file-input"
-                />
-              </div>
-              
-              <div v-if="fileError" class="error-message">{{ fileError }}</div>
-            </div>
+          <div v-else-if="filePreview" class="preview-container">
+            <!-- 画像プレビュー -->
+            <img 
+              v-if="!isVideo" 
+              :src="filePreview" 
+              class="image-preview" 
+              alt="Uploaded preview"
+            />
             
-            <!-- メッセージ入力セクション -->
-            <div class="form-section">
-              <h2>メッセージ</h2>
-              <textarea 
-                v-model="message" 
-                placeholder="メッセージを入力してください（任意）"
-                rows="4"
-              ></textarea>
-            </div>
+            <!-- 動画プレビュー -->
+            <video 
+              v-else 
+              :src="filePreview" 
+              class="video-preview" 
+              controls
+              autoplay
+              muted
+              loop
+            ></video>
             
-            <!-- タグ入力セクション -->
-            <div class="form-section">
-              <h2>タグ (任意)</h2>
-              
-              <div class="tags-input-container">
-                <div class="tag-chips">
-                  <span v-for="tag in selectedTags" :key="tag" class="tag-chip">
-                    {{ tag }}
-                    <button type="button" @click="removeTag(tag)" class="remove-tag">&times;</button>
-                  </span>
-                </div>
-                
-                <div class="tag-input-row">
-                  <input 
-                    v-model="tagInput"
-                    @keydown.enter.prevent="addTag"
-                    placeholder="タグを入力して Enter"
-                    class="tag-input"
-                  />
-                  <button type="button" @click="addTag" class="add-tag-btn">追加</button>
-                </div>
-              </div>
-              
-              <!-- 人気のタグを表示 -->
-              <div class="popular-tags">
-                <p class="popular-tags-title">人気のタグ:</p>
-                <div class="tag-suggestions">
-                  <button 
-                    v-for="tag in popularTags" 
-                    :key="tag.id"
-                    type="button"
-                    @click="selectPopularTag(tag.name)"
-                    class="tag-suggestion"
-                    :class="{ 'selected': selectedTags.includes(tag.name) }"
-                  >
-                    #{{ tag.name }} ({{ tag.count || 0 }})
-                  </button>
-                </div>
-              </div>
-            </div>
-            
-            <!-- 送信ボタン -->
-            <div class="form-actions">
-              <button type="submit" :disabled="!isFormValid || isSubmitting" class="submit-btn">
-                {{ isSubmitting ? '投稿中...' : '投稿する' }}
-              </button>
-            </div>
-          </form>
+            <button type="button" @click="removeFile" class="remove-btn">削除</button>
+          </div>
+          
+          <input 
+            type="file"
+            ref="fileInput"
+            @change="handleFileSelected"
+            accept="image/*,video/*"
+            class="file-input"
+          />
+        </div>
+        
+        <div v-if="fileError" class="error-message">{{ fileError }}</div>
+      </div>
+      
+      <!-- メッセージ入力セクション -->
+      <div class="form-section">
+        <h2>メッセージ</h2>
+        <textarea 
+          v-model="message" 
+          placeholder="メッセージを入力してください（任意）"
+          rows="4"
+        ></textarea>
+      </div>
+      
+      <!-- タグ入力セクション -->
+      <div class="form-section">
+        <h2>タグ (任意)</h2>
+        
+        <div class="tags-input-container">
+          <div class="tag-chips">
+            <span v-for="tag in selectedTags" :key="tag" class="tag-chip">
+              {{ tag }}
+              <button type="button" @click="removeTag(tag)" class="remove-tag">&times;</button>
+            </span>
+          </div>
+          
+          <div class="tag-input-row">
+            <input 
+              v-model="tagInput"
+              @keydown.enter.prevent="addTag"
+              placeholder="タグを入力して Enter"
+              class="tag-input"
+            />
+            <button type="button" @click="addTag" class="add-tag-btn">追加</button>
+          </div>
+        </div>
+        
+        <!-- 人気のタグを表示 -->
+        <div class="popular-tags">
+          <p class="popular-tags-title">人気のタグ:</p>
+          <div class="tag-suggestions">
+            <button 
+              v-for="tag in popularTags" 
+              :key="tag.id"
+              type="button"
+              @click="selectPopularTag(tag.name)"
+              class="tag-suggestion"
+              :class="{ 'selected': selectedTags.includes(tag.name) }"
+            >
+              #{{ tag.name }} ({{ tag.count || 0 }})
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+      
+      <!-- 送信ボタン -->
+      <div class="form-actions">
+        <button type="submit" :disabled="!isFormValid || isSubmitting" class="submit-btn">
+          {{ isSubmitting ? '投稿中...' : '投稿する' }}
+        </button>
+      </div>
+    </form>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
-import Header from '../components/header.vue';
-import Sidebar from '../components/Sidebar.vue';
 import authStore from '../authStore.js';
 import { apiCall, api, uploadFile, uploadLargeFile } from '../services/api.js';
 import { mockTags } from '../services/mock-data.js';
 
 const router = useRouter();
-const isSidebarOpen = ref(false);
-const toggleSidebar = () => {
-  isSidebarOpen.value = !isSidebarOpen.value;
-};
 
 // フォームデータ
 const fileInput = ref(null);
@@ -176,7 +162,6 @@ onMounted(() => {
       router.push('/login');
     }, 2000);
   }
-  
   // 人気のタグを取得
   fetchPopularTags();
 });

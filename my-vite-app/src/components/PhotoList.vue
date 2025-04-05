@@ -2,17 +2,21 @@
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import PhotoItem from "./PhotoItem.vue";
 import authStore from '../authStore.js';
-import { api } from '../services/api'; // APIサービスをインポート
-import { mockPosts } from '../services/mock-data'; // モックデータをインポート
+import { api } from '../services/api';
+import { mockPosts } from '../services/mock-data';
 
 const props = defineProps({
   sidebarOpen: {
     type: Boolean,
     default: false
+  },
+  photos: {
+    type: Array,
+    default: () => []
   }
 });
 
-const photos = ref([]); // 取得した投稿を格納
+const photosData = ref([]);
 const isLoading = ref(true);
 const error = ref(null);
 
@@ -34,19 +38,26 @@ const updateColumns = () => {
 
 // 投稿を読み込む関数
 const loadPosts = async () => {
+  // propsでphotosが渡された場合はそれを使用
+  if (props.photos && props.photos.length > 0) {
+    photosData.value = props.photos;
+    isLoading.value = false;
+    return;
+  }
+
   isLoading.value = true;
   error.value = null;
   
   try {
     // 直接fetchの代わりにAPIサービスを使用
-    photos.value = await api.posts.getAll();
+    photosData.value = await api.posts.getAll();
   } catch (err) {
     console.error('投稿取得エラー', err);
     error.value = '投稿の読み込みに失敗しました - モックデータを表示します';
     
     // APIエラーが発生した場合はモックデータを使用
     console.log('モックデータを使用します');
-    photos.value = mockPosts;
+    photosData.value = mockPosts;
   } finally {
     isLoading.value = false;
   }
@@ -58,7 +69,8 @@ const batchSize = ref(5); // 追加で表示する数
 
 // 表示する投稿を計算
 const visiblePosts = computed(() => {
-  return photos.value.slice(0, visiblePostCount.value);
+  const posts = props.photos.length > 0 ? props.photos : photosData.value;
+  return posts.slice(0, visiblePostCount.value);
 });
 
 // スクロールイベントハンドラ
@@ -68,7 +80,8 @@ const handleScroll = () => {
   const scrollTop = document.documentElement.scrollTop || document.body.scrollTop;
   const clientHeight = document.documentElement.clientHeight;
   
-  if (scrollTop + clientHeight >= scrollHeight - 300 && visiblePostCount.value < photos.value.length) {
+  const posts = props.photos.length > 0 ? props.photos : photosData.value;
+  if (scrollTop + clientHeight >= scrollHeight - 300 && visiblePostCount.value < posts.length) {
     visiblePostCount.value += batchSize.value;
   }
 };
@@ -100,6 +113,13 @@ onUnmounted(() => {
 watch(() => props.sidebarOpen, () => {
   updateColumns();
 });
+
+watch(() => props.photos, (newPhotos) => {
+  if (newPhotos && newPhotos.length > 0) {
+    photosData.value = newPhotos;
+    visiblePostCount.value = Math.min(10, newPhotos.length);
+  }
+}, { immediate: true });
 </script>
 
 <template>
@@ -122,7 +142,7 @@ watch(() => props.sidebarOpen, () => {
     </ul>
     
     <!-- もっと読み込むボタン（オプション） -->
-    <div v-if="visiblePostCount < photos.length" class="load-more">
+    <div v-if="visiblePostCount < (props.photos.length > 0 ? props.photos.length : photosData.length)" class="load-more">
       <button @click="visiblePostCount += batchSize">もっと見る</button>
     </div>
   </div>

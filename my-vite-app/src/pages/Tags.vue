@@ -1,75 +1,67 @@
 <template>
-  <div class="App">
-    <Header :toggleSidebar="toggleSidebar" />
-    <div class="main-wrapper">
-      <Sidebar :isOpen="isSidebarOpen" />
-      <div :class="['content', { 'with-sidebar': isSidebarOpen }]">
-        <div class="tags-container">
-          <h1 v-if="selectedTag">タグ: #{{ selectedTag }}</h1>
-          <h1 v-else>タグから探す</h1>
-          
-          <!-- タグ検索フォーム -->
-          <div class="tag-search">
-            <input
-              type="text"
-              v-model="tagInput"
-              placeholder="タグを検索またはクリック"
-              class="tag-search-input"
-              @keydown.enter="searchTag"
-            />
-            <button @click="searchTag" class="search-btn">検索</button>
-          </div>
-          
-          <!-- 人気タグクラウド -->
-          <div class="popular-tags">
-            <h2>人気のタグ</h2>
-            <div class="tag-cloud">
-              <button
-                v-for="tag in popularTags"
-                :key="tag.id"
-                @click="selectTag(tag.name)"
-                class="tag-btn"
-                :class="{ 'selected': tag.name === selectedTag }"
-              >
-                #{{ tag.name }} ({{ tag.count || 0 }})
-              </button>
-            </div>
-          </div>
-          
-          <!-- 投稿一覧 -->
-          <div class="posts-section">
-            <!-- ローディング表示 -->
-            <div v-if="loading" class="loading">
-              <div class="spinner"></div>
-              <p>読み込み中...</p>
-            </div>
-            
-            <!-- エラー表示 -->
-            <div v-else-if="error" class="error">
-              <p>{{ error }}</p>
-              <button @click="fetchPosts">再読み込み</button>
-            </div>
-            
-            <!-- 投稿なしの表示 -->
-            <div v-else-if="selectedTag && posts.length === 0" class="empty-state">
-              <p>「{{ selectedTag }}」のタグがついた投稿はありません</p>
-              <button @click="clearTag" class="clear-tag-btn">タグをクリア</button>
-            </div>
-            
-            <!-- タグ未選択時の表示 -->
-            <div v-else-if="!selectedTag" class="empty-state">
-              <p>タグを選択すると、関連する投稿が表示されます</p>
-            </div>
-            
-            <!-- 投稿リスト -->
-            <ul v-else :style="{ display: 'grid', gap: '1rem', gridTemplateColumns: `repeat(${columns}, 1fr)` }">
-              <li v-for="post in posts" :key="post.id">
-                <PhotoItem :photo="post" />
-              </li>
-            </ul>
-          </div>
-        </div>
+  <div class="tags-container">
+    <h1 v-if="selectedTag">タグ: #{{ selectedTag }}</h1>
+    <h1 v-else>タグから探す</h1>
+    
+    <!-- タグ検索フォーム -->
+    <div class="tag-search">
+      <input
+        type="text"
+        v-model="tagInput"
+        placeholder="タグを検索またはクリック"
+        class="tag-search-input"
+        @keydown.enter="searchTag"
+      />
+      <button @click="searchTag" class="search-btn">検索</button>
+    </div>
+    
+    <!-- 人気タグクラウド -->
+    <div class="popular-tags">
+      <h2>人気のタグ</h2>
+      <div class="tag-cloud">
+        <button
+          v-for="tag in popularTags"
+          :key="tag.id"
+          @click="selectTag(tag.name)"
+          class="tag-btn"
+          :class="{ 'selected': tag.name === selectedTag }"
+        >
+          #{{ tag.name }} ({{ tag.count || 0 }})
+        </button>
       </div>
+    </div>
+    
+    <!-- 投稿一覧 -->
+    <div class="posts-section">
+      <!-- ローディング表示 -->
+      <div v-if="loading" class="loading">
+        <div class="spinner"></div>
+        <p>読み込み中...</p>
+      </div>
+      
+      <!-- エラー表示 -->
+      <div v-else-if="error" class="error">
+        <p>{{ error }}</p>
+        <button @click="fetchPosts">再読み込み</button>
+      </div>
+      
+      <!-- 投稿なしの表示 -->
+      <div v-else-if="selectedTag && posts.length === 0" class="empty-state">
+        <p>「{{ selectedTag }}」のタグがついた投稿はありません</p>
+        <button @click="clearTag" class="clear-tag-btn">タグをクリア</button>
+      </div>
+      
+      <!-- タグ未選択時の表示 -->
+      <div v-else-if="!selectedTag" class="empty-state">
+        <p>タグを選択すると、関連する投稿が表示されます</p>
+      </div>
+      
+      <!-- 投稿リスト -->
+      <ul v-else :style="{ display: 'grid', gap: '1rem', gridTemplateColumns: `repeat(${columns}, 1fr)` }">
+        <li v-for="post in posts" :key="post.id">
+          <PhotoItem :photo="post" />
+        </li>
+      </ul>
     </div>
   </div>
 </template>
@@ -77,13 +69,10 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import Header from '../components/header.vue'
-import Sidebar from '../components/Sidebar.vue'
 import PhotoItem from '../components/PhotoItem.vue'
 
 const router = useRouter()
 const route = useRoute()
-const isSidebarOpen = ref(false)
 const loading = ref(false)
 const error = ref(null)
 const posts = ref([])
@@ -93,24 +82,6 @@ const popularTags = ref([])
 
 // レスポンシブ対応のカラム数
 const columns = ref(1)
-
-const updateColumns = () => {
-  const width = window.innerWidth
-  if (width < 500) {
-    columns.value = 1
-  } else if (width < 768) {
-    columns.value = isSidebarOpen.value ? 1 : 2
-  } else if (width < 1024) {
-    columns.value = isSidebarOpen.value ? 2 : 3
-  } else {
-    columns.value = isSidebarOpen.value ? 3 : 4
-  }
-}
-
-const toggleSidebar = () => {
-  isSidebarOpen.value = !isSidebarOpen.value
-  updateColumns()
-}
 
 // URLからタグを取得
 const getTagFromUrl = () => {
@@ -195,41 +166,16 @@ const fetchPosts = async () => {
 
 // 初期化
 onMounted(() => {
-  window.addEventListener('resize', updateColumns)
-  updateColumns()
-  
   // URLからタグを取得
   getTagFromUrl()
   
   // 人気タグを取得
   fetchPopularTags()
-  
-  // タグが指定されていれば投稿を取得
+
+  // もしタグパラメータがあれば投稿を取得
   if (selectedTag.value) {
-    fetchPosts()
+    fetchPosts();
   }
-})
-
-onUnmounted(() => {
-  window.removeEventListener('resize', updateColumns)
-})
-
-// ルート変更を監視
-watch(() => route.query.tag, (newTag) => {
-  if (newTag) {
-    selectedTag.value = decodeURIComponent(newTag)
-    tagInput.value = selectedTag.value
-    fetchPosts()
-  } else {
-    selectedTag.value = ''
-    tagInput.value = ''
-    posts.value = []
-  }
-})
-
-// サイドバー状態変更時にカラム数更新
-watch(() => isSidebarOpen.value, () => {
-  updateColumns()
 })
 </script>
 

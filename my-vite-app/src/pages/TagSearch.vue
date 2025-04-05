@@ -1,14 +1,11 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import Header from '../components/header.vue';
-import Sidebar from '../components/Sidebar.vue';
 import PhotoList from '../components/PhotoList.vue';
 import { api } from '../services/api.js';
 
 const router = useRouter();
 const route = useRoute();
-const isSidebarOpen = ref(false);
 const loading = ref(true);
 const tagsLoading = ref(true);
 const error = ref('');
@@ -20,10 +17,6 @@ const filteredPosts = ref([]);
 const tagFromUrl = computed(() => {
   return route.query.tag || '';
 });
-
-const toggleSidebar = () => {
-  isSidebarOpen.value = !isSidebarOpen.value;
-};
 
 // タグ一覧を取得
 const fetchTags = async () => {
@@ -121,57 +114,49 @@ watch(tagFromUrl, async (newTag) => {
 </script>
 
 <template>
-  <div class="App">
-    <Header :toggleSidebar="toggleSidebar" />
+  <div class="tag-search-container">
+    <h1>タグ検索</h1>
     
-    <div class="main-wrapper">
-      <Sidebar :isOpen="isSidebarOpen" />
-      
-      <div :class="['content', { 'with-sidebar': isSidebarOpen }]">
-        <h1>タグ検索</h1>
-        
-        <div v-if="error" class="error-message">{{ error }}</div>
-        
-        <!-- タグ一覧 -->
-        <div class="tag-container">
-          <div v-if="tagsLoading" class="tag-loading">
-            <div class="spinner small-spinner"></div>
-            <p>タグを読み込み中...</p>
-          </div>
-          
-          <div v-else-if="tags.length === 0" class="no-tags">
-            タグが見つかりません
-          </div>
-          
-          <div v-else class="tag-list">
-            <button 
-              v-for="tag in tags" 
-              :key="tag.id || tag.name"
-              @click="selectTag(tag.name)"
-              class="tag-button"
-              :class="{ active: selectedTag === tag.name }"
-            >
-              #{{ tag.name }} ({{ tag.count || 0 }})
-            </button>
-          </div>
-        </div>
-        
-        <!-- 選択中のタグと検索結果 -->
-        <div v-if="selectedTag" class="search-results">
-          <h2>タグ「{{ selectedTag }}」の投稿</h2>
-          
-          <div v-if="loading" class="loading">
-            <div class="spinner"></div>
-            <p>投稿を読み込み中...</p>
-          </div>
-          
-          <div v-else-if="filteredPosts.length === 0" class="no-results">
-            このタグの投稿はまだありません
-          </div>
-          
-          <PhotoList v-else :photos="filteredPosts" />
-        </div>
+    <div v-if="error" class="error-message">{{ error }}</div>
+    
+    <!-- タグ一覧 -->
+    <div class="tag-container">
+      <div v-if="tagsLoading" class="tag-loading">
+        <div class="spinner small-spinner"></div>
+        <p>タグを読み込み中...</p>
       </div>
+      
+      <div v-else-if="tags.length === 0" class="no-tags">
+        タグが見つかりません
+      </div>
+      
+      <div v-else class="tag-list">
+        <button 
+          v-for="tag in tags" 
+          :key="tag.id || tag.name"
+          @click="selectTag(tag.name)"
+          class="tag-button"
+          :class="{ active: selectedTag === tag.name }"
+        >
+          #{{ tag.name }} ({{ tag.count || 0 }})
+        </button>
+      </div>
+    </div>
+    
+    <!-- 選択中のタグと検索結果 -->
+    <div v-if="selectedTag" class="search-results">
+      <h2>タグ「{{ selectedTag }}」の投稿</h2>
+      
+      <div v-if="loading" class="loading">
+        <div class="spinner"></div>
+        <p>投稿を読み込み中...</p>
+      </div>
+      
+      <div v-else-if="filteredPosts.length === 0" class="no-results">
+        このタグの投稿はまだありません
+      </div>
+      
+      <PhotoList v-else :photos="filteredPosts" />
     </div>
   </div>
 </template>
