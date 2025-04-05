@@ -36,6 +36,7 @@ onMounted(() => {
   window.addEventListener('resize', checkWindowSize);
   checkWindowSize();
   authStore.initAuth();
+  console.log('アプリ全体で認証状態を初期化しました');
 });
 
 onUnmounted(() => {

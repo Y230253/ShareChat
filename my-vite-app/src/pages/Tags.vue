@@ -67,116 +67,152 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
-import PhotoItem from '../components/PhotoItem.vue'
+import { ref, onMounted, computed } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
+import { api } from '../services/api.js';
+import { mockTags } from '../services/mock-data.js';
+import PhotoItem from '../components/PhotoItem.vue'; // 写真アイテムコンポーネントをインポート
 
-const router = useRouter()
-const route = useRoute()
-const loading = ref(false)
-const error = ref(null)
-const posts = ref([])
-const tagInput = ref('')
-const selectedTag = ref('')
-const popularTags = ref([])
+const router = useRouter();
+const route = useRoute();
+const tags = ref([]);
+const popularTags = ref([]); // 人気タグ用の変数
+const loading = ref(true);
+const error = ref(null);
+const tagInput = ref(''); // タグ検索用入力
+const selectedTag = ref(''); // 選択されたタグ
+const posts = ref([]); // タグに関連する投稿
+const columns = ref(3); // グリッド列数
 
-// レスポンシブ対応のカラム数
-const columns = ref(1)
+// 画面サイズに応じて列数を変更
+const updateColumns = () => {
+  const width = window.innerWidth;
+  if (width < 600) columns.value = 1;
+  else if (width < 960) columns.value = 2;
+  else columns.value = 3;
+};
 
-// URLからタグを取得
-const getTagFromUrl = () => {
-  const tag = route.query.tag
-  if (tag) {
-    selectedTag.value = decodeURIComponent(tag)
-    tagInput.value = selectedTag.value
-  }
-}
-
-// タグ選択
-const selectTag = (tagName) => {
-  selectedTag.value = tagName
-  tagInput.value = tagName
-  fetchPosts()
+onMounted(async () => {
+  // 画面サイズ変更イベントリスナー
+  window.addEventListener('resize', updateColumns);
+  updateColumns();
   
-  // URLにタグをクエリパラメータとして追加（履歴に残す）
-  router.push({
-    path: '/tags',
-    query: { tag: tagName }
-  })
-}
-
-// タグ検索
-const searchTag = () => {
-  if (tagInput.value.trim()) {
-    selectTag(tagInput.value.trim())
-  }
-}
-
-// タグクリア
-const clearTag = () => {
-  selectedTag.value = ''
-  tagInput.value = ''
-  posts.value = []
-  
-  // クエリパラメータをクリア
-  router.push('/tags')
-}
-
-// 人気タグ取得
-const fetchPopularTags = async () => {
-  try {
-    const res = await fetch('http://localhost:3000/tags')
-    if (!res.ok) {
-      console.error('タグ取得エラー:', await res.text())
-      return
-    }
-    
-    const tags = await res.json()
-    popularTags.value = tags
-  } catch (err) {
-    console.error('タグ取得エラー:', err)
-  }
-}
-
-// 投稿取得
-const fetchPosts = async () => {
-  if (!selectedTag.value) {
-    posts.value = []
-    return
-  }
-  
-  loading.value = true
-  error.value = null
-  
-  try {
-    const res = await fetch(`http://localhost:3000/posts?tag=${encodeURIComponent(selectedTag.value)}`)
-    if (!res.ok) {
-      throw new Error('投稿の取得に失敗しました')
-    }
-    
-    const data = await res.json()
-    posts.value = data
-  } catch (err) {
-    console.error('投稿取得エラー:', err)
-    error.value = err.message || 'データの取得に失敗しました'
-  } finally {
-    loading.value = false
-  }
-}
-
-// 初期化
-onMounted(() => {
-  // URLからタグを取得
-  getTagFromUrl()
-  
-  // 人気タグを取得
-  fetchPopularTags()
-
-  // もしタグパラメータがあれば投稿を取得
-  if (selectedTag.value) {
+  // URL からタグを取得
+  const tagFromUrl = route.params.name || route.query.tag;
+  if (tagFromUrl) {
+    selectedTag.value = decodeURIComponent(tagFromUrl);
+    console.log(`URLからタグを検出: ${selectedTag.value}`);
     fetchPosts();
   }
-})
+  
+  await fetchTags();
+});
+
+// タグデータを取得
+const fetchTags = async () => {
+  try {
+    loading.value = true;
+    error.value = null;
+    
+    console.log('タグ一覧を取得中...');
+    const result = await api.tags.getAll();
+    
+    if (Array.isArray(result)) {
+      tags.value = result;
+      console.log(`${tags.value.length}件のタグを取得しました`);
+      
+      // 最近使用されたタグを抽出して人気タグとして表示（最大10個）
+      popularTags.value = [...result]
+        .sort((a, b) => {
+          // 最新のタグを上位に（または使用回数が多いものを上位に）
+          return (b.updatedAt || b.count || 0) - (a.updatedAt || a.count || 0);
+        })
+        .slice(0, 10);
+      
+      console.log('人気タグをソート完了:', popularTags.value);
+    } else {
+      console.warn('タグデータが配列ではありません:', result);
+      tags.value = [];
+      popularTags.value = [];
+    }
+  } catch (err) {
+    console.error('タグ取得中にエラー発生:', err);
+    error.value = 'タグの読み込み中にエラーが発生しました。';
+    // エラー時はモックデータを使用
+    tags.value = mockTags;
+    popularTags.value = mockTags.slice(0, 10);
+  } finally {
+    loading.value = false;
+  }
+};
+
+// タグを選択したときの処理
+const selectTag = (tagName) => {
+  if (!tagName) return;
+  
+  console.log(`タグを選択: ${tagName}`);
+  selectedTag.value = tagName;
+  
+  // URLを更新
+  router.push({ path: '/tags', query: { tag: tagName } });
+  
+  // 投稿を取得
+  fetchPosts();
+};
+
+// タグで検索
+const searchTag = () => {
+  const tag = tagInput.value.trim();
+  if (!tag) return;
+  
+  console.log(`タグ検索: ${tag}`);
+  selectTag(tag);
+  tagInput.value = ''; // 検索後は入力をクリア
+};
+
+// タグをクリア
+const clearTag = () => {
+  selectedTag.value = '';
+  posts.value = [];
+  router.push({ path: '/tags' });
+};
+
+// 選択したタグに関連する投稿を取得
+const fetchPosts = async () => {
+  if (!selectedTag.value) {
+    posts.value = [];
+    return;
+  }
+  
+  try {
+    loading.value = true;
+    error.value = null;
+    
+    console.log(`タグ「${selectedTag.value}」の投稿を取得中...`);
+    const result = await api.posts.getByTag(selectedTag.value);
+    
+    if (Array.isArray(result)) {
+      posts.value = result;
+      console.log(`${posts.value.length}件の投稿を取得しました`);
+    } else {
+      console.warn('投稿データが配列ではありません:', result);
+      posts.value = [];
+    }
+  } catch (err) {
+    console.error('投稿取得中にエラー発生:', err);
+    error.value = '投稿の読み込み中にエラーが発生しました。';
+    posts.value = [];
+  } finally {
+    loading.value = false;
+  }
+};
+
+const navigateToTag = (tag) => {
+  if (tag && tag.name) {
+    console.log(`タグ "${tag.name}" のページに遷移します`);
+    router.push(`/tags/${tag.name}`);
+  }
+};
 </script>
 
 <style scoped>
