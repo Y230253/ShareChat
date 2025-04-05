@@ -3,477 +3,675 @@
     <Header :toggleSidebar="toggleSidebar" />
     <div class="main-wrapper">
       <Sidebar :isOpen="isSidebarOpen" />
-      <div class="post-form">
-        <h1>新規投稿</h1>
-        <form @submit.prevent="handleSubmit">
-          <div class="form-group">
-            <label for="mediaType">メディアタイプ</label>
-            <select id="mediaType" v-model="mediaType">
-              <option value="image">画像</option>
-              <option value="video">動画</option>
-            </select>
-          </div>
+      <div :class="['content', { 'with-sidebar': isSidebarOpen }]">
+        <div class="post-form-container">
+          <h1>写真・動画投稿フォーム</h1>
           
-          <div class="form-group">
-            <label for="file">{{ mediaType === 'image' ? '写真' : '動画' }}を選択</label>
-            <input 
-              type="file" 
-              id="file" 
-              @change="handleFileChange" 
-              :accept="mediaType === 'image' ? 'image/*' : 'video/*'"
-              required
-            >
-            
-            <!-- プレビュー表示 -->
-            <div v-if="filePreviewUrl" class="preview-container">
-              <img v-if="mediaType === 'image'" :src="filePreviewUrl" alt="プレビュー" class="preview-media">
-              <video v-else :src="filePreviewUrl" controls class="preview-media"></video>
-              <button type="button" @click="clearFileSelection" class="clear-btn">選択解除</button>
-            </div>
-          </div>
+          <div v-if="errorMsg" class="error-message">{{ errorMsg }}</div>
+          <div v-if="successMsg" class="success-message">{{ successMsg }}</div>
           
-          <div class="form-group">
-            <label for="message">コメント</label>
-            <textarea id="message" v-model="message" rows="4"></textarea>
-          </div>
-          
-          <!-- タグ選択エリア -->
-          <div class="form-group">
-            <label>タグ選択</label>
-            <div class="tag-selection-area">
-              <!-- 選択済みタグ -->
-              <div class="selected-tags">
-                <span v-for="tag in selectedTags" :key="tag" class="tag">
-                  {{ tag }}
-                  <button type="button" @click="removeTag(tag)" class="remove-tag">×</button>
-                </span>
-              </div>
+          <form @submit.prevent="submitForm" class="post-form">
+            <!-- ファイルアップロードセクション -->
+            <div class="form-section">
+              <h2>メディアをアップロード</h2>
               
-              <!-- タグ入力フォーム -->
-              <div class="tag-input-area">
-                <input
-                  type="text"
-                  v-model="tagInput"
-                  @keydown.enter.prevent="addTag"
-                  @keydown.tab.prevent="addTag"
-                  placeholder="新しいタグ（Enterで追加）"
-                  class="tag-input"
+              <div 
+                class="upload-area"
+                :class="{'dragging': isDragging, 'has-preview': filePreview}"
+                @dragover.prevent="handleDragOver"
+                @dragleave.prevent="handleDragLeave"
+                @drop.prevent="handleDrop"
+              >
+                <div v-if="!filePreview && !uploading" class="upload-placeholder">
+                  <div class="icon">📷</div>
+                  <p>クリックまたはドラッグ＆ドロップで写真や動画をアップロード</p>
+                  <p class="hint">対応形式: JPG, PNG, GIF, MP4, MOVなど</p>
+                </div>
+                
+                <div v-if="uploading" class="upload-loading">
+                  <div class="spinner"></div>
+                  <p>アップロード中 ({{ uploadProgress }}%)...</p>
+                </div>
+                
+                <div v-else-if="filePreview" class="preview-container">
+                  <!-- 画像プレビュー -->
+                  <img 
+                    v-if="!isVideo" 
+                    :src="filePreview" 
+                    class="image-preview" 
+                    alt="Uploaded preview"
+                  />
+                  
+                  <!-- 動画プレビュー -->
+                  <video 
+                    v-else 
+                    :src="filePreview" 
+                    class="video-preview" 
+                    controls
+                    autoplay
+                    muted
+                    loop
+                  ></video>
+                  
+                  <button type="button" @click="removeFile" class="remove-btn">削除</button>
+                </div>
+                
+                <input 
+                  type="file"
+                  ref="fileInput"
+                  @change="handleFileSelected"
+                  accept="image/*,video/*"
+                  class="file-input"
                 />
-                <button type="button" @click="addTag" class="add-tag-btn">追加</button>
               </div>
               
-              <!-- 人気タグ表示 -->
+              <div v-if="fileError" class="error-message">{{ fileError }}</div>
+            </div>
+            
+            <!-- メッセージ入力セクション -->
+            <div class="form-section">
+              <h2>メッセージ</h2>
+              <textarea 
+                v-model="message" 
+                placeholder="メッセージを入力してください（任意）"
+                rows="4"
+              ></textarea>
+            </div>
+            
+            <!-- タグ入力セクション -->
+            <div class="form-section">
+              <h2>タグ (任意)</h2>
+              
+              <div class="tags-input-container">
+                <div class="tag-chips">
+                  <span v-for="tag in selectedTags" :key="tag" class="tag-chip">
+                    {{ tag }}
+                    <button type="button" @click="removeTag(tag)" class="remove-tag">&times;</button>
+                  </span>
+                </div>
+                
+                <div class="tag-input-row">
+                  <input 
+                    v-model="tagInput"
+                    @keydown.enter.prevent="addTag"
+                    placeholder="タグを入力して Enter"
+                    class="tag-input"
+                  />
+                  <button type="button" @click="addTag" class="add-tag-btn">追加</button>
+                </div>
+              </div>
+              
+              <!-- 人気のタグを表示 -->
               <div class="popular-tags">
-                <p>人気のタグ:</p>
-                <div class="tag-cloud">
-                  <button
-                    type="button"
-                    v-for="tag in popularTags"
+                <p class="popular-tags-title">人気のタグ:</p>
+                <div class="tag-suggestions">
+                  <button 
+                    v-for="tag in popularTags" 
                     :key="tag.id"
-                    @click="selectExistingTag(tag.name)"
-                    class="tag-btn"
-                    :class="{ selected: selectedTags.includes(tag.name) }"
+                    type="button"
+                    @click="selectPopularTag(tag.name)"
+                    class="tag-suggestion"
+                    :class="{ 'selected': selectedTags.includes(tag.name) }"
                   >
-                    {{ tag.name }} ({{ tag.count || 0 }})
+                    #{{ tag.name }} ({{ tag.count || 0 }})
                   </button>
                 </div>
               </div>
             </div>
-          </div>
-          
-          <div v-if="errorMsg" class="error">
-            {{ errorMsg }}
-          </div>
-          
-          <div class="buttons">
-            <button type="submit" class="submit-btn">投稿する</button>
-            <button type="button" @click="handleCancel" class="cancel-btn">キャンセル</button>
-          </div>
-        </form>
+            
+            <!-- 送信ボタン -->
+            <div class="form-actions">
+              <button type="submit" :disabled="!isFormValid || isSubmitting" class="submit-btn">
+                {{ isSubmitting ? '投稿中...' : '投稿する' }}
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import authStore from '../authStore.js'
-import Header from '../components/header.vue'
-import Sidebar from '../components/Sidebar.vue'
-import { apiCall } from '../services/api.js' // APIサービスをインポート
+import { ref, onMounted, computed } from 'vue';
+import { useRouter } from 'vue-router';
+import Header from '../components/header.vue';
+import Sidebar from '../components/Sidebar.vue';
+import authStore from '../authStore.js';
+import { apiCall, api, uploadFile } from '../services/api.js';
+import { mockTags } from '../services/mock-data.js';
 
-const router = useRouter()
-const file = ref(null)
-const message = ref('')
-const errorMsg = ref('')
-const isSidebarOpen = ref(false)
-const mediaType = ref('image') // デフォルトは画像
-const filePreviewUrl = ref('') // プレビュー表示用URL
+const router = useRouter();
+const isSidebarOpen = ref(false);
+const toggleSidebar = () => {
+  isSidebarOpen.value = !isSidebarOpen.value;
+};
 
-// タグ関連
-const tagInput = ref('')
-const selectedTags = ref([])
-const popularTags = ref([])
+// フォームデータ
+const fileInput = ref(null);
+const filePreview = ref(null);
+const message = ref('');
+const tagInput = ref('');
+const selectedTags = ref([]);
+const popularTags = ref([]);
+
+// UI状態
+const isDragging = ref(false);
+const uploading = ref(false);
+const uploadProgress = ref(0);
+const isSubmitting = ref(false);
+const errorMsg = ref('');
+const successMsg = ref('');
+const fileError = ref('');
+const isVideo = ref(false);
+
+// アップロードしたファイルのURL
+const uploadedFileUrl = ref('');
 
 // ログインチェック
 onMounted(() => {
   if (!authStore.isLoggedIn.value) {
-    errorMsg.value = "投稿するには、ログインが必要です"
+    errorMsg.value = "投稿するには、ログインが必要です";
     setTimeout(() => {
-      router.push('/login')
-    }, 2000)
+      router.push('/login');
+    }, 2000);
   }
   
   // 人気のタグを取得
-  fetchPopularTags()
-})
+  fetchPopularTags();
+});
 
 // 人気のタグを取得する関数
 const fetchPopularTags = async () => {
   try {
     // 404エラーを適切に処理
     try {
-      const tags = await apiCall('/tags');
-      popularTags.value = tags.slice(0, 10); // 上位10件のみ表示
+      const tags = await api.tags.getAll();
+      popularTags.value = Array.isArray(tags) ? tags.slice(0, 10) : []; // 上位10件のみ表示
     } catch (apiError) {
       console.error('タグ取得エラー:', apiError);
       
-      // APIが失敗した場合はデフォルトのタグを使用
-      popularTags.value = [
-        { id: 1, name: '風景', count: 10 },
-        { id: 2, name: '料理', count: 8 },
-        { id: 3, name: '旅行', count: 7 },
-        { id: 4, name: '動物', count: 6 },
-        { id: 5, name: '自然', count: 5 }
-      ];
+      // APIが失敗した場合はモックデータを使用
+      popularTags.value = mockTags.slice(0, 10);
     }
-  } catch (err) {
-    console.error('タグ処理エラー:', err);
+  } catch (error) {
+    console.error('タグデータ取得エラー:', error);
+    popularTags.value = [
+      { id: 1, name: '風景', count: 10 },
+      { id: 2, name: '料理', count: 8 },
+      { id: 3, name: '旅行', count: 7 },
+      { id: 4, name: '動物', count: 6 },
+    ];
   }
-}
+};
 
-const toggleSidebar = () => {
-  isSidebarOpen.value = !isSidebarOpen.value
-}
+// ドラッグ操作のハンドリング
+const handleDragOver = (e) => {
+  isDragging.value = true;
+  e.dataTransfer.dropEffect = 'copy';
+};
 
-const handleFileChange = (e) => {
-  const selectedFile = e.target.files[0]
+const handleDragLeave = () => {
+  isDragging.value = false;
+};
+
+const handleDrop = (e) => {
+  isDragging.value = false;
   
-  if (!selectedFile) {
-    clearFileSelection()
-    return
+  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+    handleFile(e.dataTransfer.files[0]);
+  }
+};
+
+// ファイル選択
+const handleFileSelected = (e) => {
+  if (e.target.files && e.target.files[0]) {
+    handleFile(e.target.files[0]);
+  }
+};
+
+// ファイル処理
+const handleFile = async (file) => {
+  // ファイルタイプチェック
+  const validImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+  const validVideoTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo'];
+  
+  if (![...validImageTypes, ...validVideoTypes].includes(file.type)) {
+    fileError.value = '非対応のファイル形式です。画像または動画ファイルをアップロードしてください。';
+    return;
+  }
+
+  fileError.value = '';
+  
+  // ファイルサイズチェック (10MB上限)
+  const maxSize = 10 * 1024 * 1024; // 10MB
+  if (file.size > maxSize) {
+    fileError.value = 'ファイルサイズが大きすぎます。10MB以下のファイルを選択してください。';
+    return;
   }
   
-  file.value = selectedFile
+  // 動画かどうかを判定
+  isVideo.value = validVideoTypes.includes(file.type);
   
-  // ファイルタイプをチェック
-  const fileType = selectedFile.type
-  if (mediaType.value === 'image' && !fileType.startsWith('image/')) {
-    errorMsg.value = "画像ファイルを選択してください"
-    clearFileSelection()
-    return
-  }
+  // ローカルプレビュー
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    filePreview.value = e.target.result;
+  };
+  reader.readAsDataURL(file);
   
-  if (mediaType.value === 'video' && !fileType.startsWith('video/')) {
-    errorMsg.value = "動画ファイルを選択してください"
-    clearFileSelection()
-    return
-  }
-  
-  // プレビューURLを作成
-  filePreviewUrl.value = URL.createObjectURL(selectedFile)
-  errorMsg.value = ''
-}
-
-const clearFileSelection = () => {
-  file.value = null
-  if (filePreviewUrl.value) {
-    URL.revokeObjectURL(filePreviewUrl.value)
-    filePreviewUrl.value = ''
-  }
-}
-
-// タグを追加する関数
-const addTag = () => {
-  const tag = tagInput.value.trim()
-  if (tag && !selectedTags.value.includes(tag) && selectedTags.value.length < 5) {
-    selectedTags.value.push(tag)
-    tagInput.value = ''
-  } else if (selectedTags.value.length >= 5) {
-    errorMsg.value = "タグは最大5つまで設定できます"
-    setTimeout(() => errorMsg.value = '', 3000)
-  }
-}
-
-// タグを削除する関数
-const removeTag = (tag) => {
-  selectedTags.value = selectedTags.value.filter(t => t !== tag)
-}
-
-// 既存のタグを選択/解除する関数
-const selectExistingTag = (tagName) => {
-  if (selectedTags.value.includes(tagName)) {
-    removeTag(tagName)
-  } else if (selectedTags.value.length < 5) {
-    selectedTags.value.push(tagName)
-  } else {
-    errorMsg.value = "タグは最大5つまで設定できます"
-    setTimeout(() => errorMsg.value = '', 3000)
-  }
-}
-
-const handleSubmit = async () => {
   try {
-    if (!authStore.isLoggedIn.value) {
-      errorMsg.value = "ログインが必要です"
-      setTimeout(() => router.push('/login'), 1500)
-      return
+    // アップロード処理
+    uploading.value = true;
+    uploadProgress.value = 0;
+    
+    // アップロード進捗
+    const onProgress = (progress) => {
+      uploadProgress.value = Math.round(progress);
+    };
+    
+    // 実際のアップロード
+    const result = await api.upload(file, onProgress);
+    
+    if (result && result.imageUrl) {
+      uploadedFileUrl.value = result.imageUrl;
+      isVideo.value = result.isVideo || false;
+    } else {
+      throw new Error('アップロードに失敗しました');
     }
-
-    if (!file.value) {
-      errorMsg.value = "ファイルが選択されていません"
-      return
-    }
-
-    // 認証トークン取得
-    const token = localStorage.getItem('token')
-    console.log('認証トークン存在チェック:', token ? '存在します' : '存在しません')
-    
-    if (!token) {
-      errorMsg.value = "認証情報が見つかりません"
-      setTimeout(() => router.push('/login'), 1500)
-      return
-    }
-
-    // ファイルアップロード
-    const formData = new FormData()
-    formData.append('file', file.value)
-
-    // APIサービスを使用せず、FormDataを直接送信する必要があるため特殊ケース
-    const uploadRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/upload`, { 
-      method: 'POST', 
-      body: formData 
-    })
-    
-    if(!uploadRes.ok) {
-      const errorData = await uploadRes.json()
-      errorMsg.value = errorData.error || "アップロードに失敗しました"
-      return
-    }
-    
-    const uploadData = await uploadRes.json()
-    const imageUrl = uploadData.imageUrl
-    const isVideo = mediaType.value === 'video' || uploadData.isVideo
-
-    // 投稿処理（APIサービスを使用）
-    const postData = await apiCall('/posts', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
-      body: {
-        image_url: imageUrl,
-        message: message.value,
-        isVideo: isVideo,
-        tags: selectedTags.value
-      }
-    })
-    
-    // クリーンアップ
-    clearFileSelection()
-    
-    console.log('投稿成功:', postData)
-    
-    router.push('/')
-  } catch (err) {
-    console.error("投稿処理エラー:", err)
-    errorMsg.value = "ネットワークエラーが発生しました"
+  } catch (error) {
+    console.error('アップロードエラー:', error);
+    fileError.value = `アップロードエラー: ${error.message}`;
+    // プレビューはそのままにする（エラー時も表示を維持）
+  } finally {
+    uploading.value = false;
   }
-}
+};
 
-const handleCancel = () => {
-  clearFileSelection()
-  router.push('/')
-}
+// ファイルの削除
+const removeFile = () => {
+  filePreview.value = null;
+  uploadedFileUrl.value = '';
+  isVideo.value = false;
+  
+  // input要素をリセット
+  if (fileInput.value) {
+    fileInput.value.value = '';
+  }
+};
+
+// タグの追加
+const addTag = () => {
+  const tag = tagInput.value.trim();
+  
+  if (tag && !selectedTags.value.includes(tag)) {
+    if (selectedTags.value.length >= 10) {
+      fileError.value = 'タグは最大10個までです';
+      return;
+    }
+    
+    selectedTags.value.push(tag);
+    tagInput.value = '';
+  }
+};
+
+// タグの削除
+const removeTag = (tag) => {
+  selectedTags.value = selectedTags.value.filter(t => t !== tag);
+};
+
+// 人気のタグを選択
+const selectPopularTag = (tagName) => {
+  if (selectedTags.value.includes(tagName)) {
+    // すでに選択されていたら削除
+    selectedTags.value = selectedTags.value.filter(t => t !== tagName);
+  } else {
+    // 選択されていなければ追加
+    if (selectedTags.value.length >= 10) {
+      fileError.value = 'タグは最大10個までです';
+      return;
+    }
+    
+    selectedTags.value.push(tagName);
+  }
+};
+
+// フォームのバリデーション
+const isFormValid = computed(() => {
+  return !!uploadedFileUrl.value || !!filePreview.value;
+});
+
+// フォーム送信
+const submitForm = async () => {
+  if (!isFormValid.value) {
+    errorMsg.value = '画像または動画を選択してください';
+    return;
+  }
+  
+  if (isSubmitting.value) return;
+  
+  try {
+    isSubmitting.value = true;
+    errorMsg.value = '';
+    
+    // 認証チェック
+    console.log('認証トークン存在チェック:', localStorage.getItem('token') ? '存在します' : '存在しません');
+    
+    if (!localStorage.getItem('token')) {
+      errorMsg.value = '認証トークンがありません。再ログインしてください。';
+      setTimeout(() => router.push('/login'), 2000);
+      return;
+    }
+    
+    // 投稿データの準備
+    const postData = {
+      image_url: uploadedFileUrl.value || filePreview.value,
+      message: message.value,
+      isVideo: isVideo.value,
+      tags: selectedTags.value
+    };
+    
+    // 投稿APIを呼び出し
+    await api.posts.create(postData);
+    
+    // 成功表示
+    successMsg.value = '投稿が完了しました！';
+    
+    // フォームをリセット
+    message.value = '';
+    removeFile();
+    selectedTags.value = [];
+    
+    // ホームページへリダイレクト
+    setTimeout(() => {
+      router.push('/');
+    }, 1500);
+    
+  } catch (error) {
+    console.error('投稿エラー:', error);
+    errorMsg.value = `投稿に失敗しました: ${error.message}`;
+  } finally {
+    isSubmitting.value = false;
+  }
+};
 </script>
 
 <style scoped>
-.post-form {
-  max-width: 600px;
-  margin: 1rem auto;
-  padding: 2rem;
-  height: 700px;
-  border: 1px solid #ccc;
+.post-form-container {
+  max-width: 800px;
+  margin: 40px auto;
+  padding: 20px;
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 20px;
+  color: #2e7d32;
+  font-size: 24px;
+}
+
+.form-section {
+  margin-bottom: 25px;
+}
+
+h2 {
+  font-size: 18px;
+  margin-bottom: 10px;
+  color: #333;
+}
+
+.upload-area {
+  border: 2px dashed #a5d6a7;
   border-radius: 8px;
-  background-color: #c2e2b0;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-}
-.post-form h1 {
+  padding: 20px;
   text-align: center;
-  margin-bottom: 1.5rem;
-  color: #2e7d32;
-}
-.form-group {
-  margin-bottom: 1.5rem;
-}
-.form-group label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: bold;
-  color: #2e7d32;
-}
-.form-group select,
-.form-group textarea,
-.form-group input[type="text"] {
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid #a5d6a7;
-  border-radius: 4px;
-  font-size: 1rem;
-}
-.preview-container {
-  margin-top: 1rem;
   position: relative;
-  max-width: 100%;
-  text-align: center;
-}
-.preview-media {
-  max-width: 100%;
-  max-height: 300px;
-  border-radius: 4px;
-}
-.clear-btn {
-  position: absolute;
-  top: 0;
-  right: 0;
-  background-color: rgba(255, 255, 255, 0.8);
-  border: none;
-  border-radius: 50%;
-  width: 30px;
-  height: 30px;
+  min-height: 200px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  transition: all 0.3s ease;
 }
-.buttons {
+
+.upload-area:hover {
+  border-color: #2e7d32;
+  background-color: rgba(46, 125, 50, 0.05);
+}
+
+.upload-area.dragging {
+  border-color: #2e7d32;
+  background-color: rgba(46, 125, 50, 0.1);
+}
+
+.upload-area.has-preview {
+  border-style: solid;
+}
+
+.upload-placeholder {
   display: flex;
-  justify-content: space-between;
-  margin-top: 1rem;
+  flex-direction: column;
+  align-items: center;
 }
-.submit-btn {
-  background-color: #2e7d32;
+
+.upload-placeholder .icon {
+  font-size: 48px;
+  margin-bottom: 10px;
+}
+
+.upload-placeholder p {
+  margin: 5px 0;
+}
+
+.upload-placeholder .hint {
+  font-size: 14px;
+  color: #666;
+}
+
+.file-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.preview-container {
+  position: relative;
+  width: 100%;
+  max-height: 400px;
+  overflow: hidden;
+}
+
+.image-preview, .video-preview {
+  max-width: 100%;
+  max-height: 400px;
+  display: block;
+  margin: 0 auto;
+  border-radius: 4px;
+}
+
+.remove-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background-color: rgba(0, 0, 0, 0.6);
   color: white;
-  padding: 0.75rem 1.5rem;
   border: none;
-  border-radius: 4px;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  font-size: 16px;
   cursor: pointer;
-}
-.cancel-btn {
-  background-color: #f5f5f5;
-  color: #333;
-  padding: 0.75rem 1.5rem;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  cursor: pointer;
-}
-.error {
-  color: #e53935;
-  margin-bottom: 1rem;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-/* タグ関連のスタイル */
-.tag-selection-area {
-  margin-top: 0.5rem;
-  border: 1px solid #e0e0e0;
-  border-radius: 4px;
-  padding: 1rem;
-  background-color: #f9f9f9;
+.upload-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
-.selected-tags {
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(46, 125, 50, 0.2);
+  border-top-color: #2e7d32;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 10px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 16px;
+}
+
+.tags-input-container {
+  margin-bottom: 10px;
+}
+
+.tag-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
-.tag {
-  display: inline-flex;
-  align-items: center;
+.tag-chip {
   background-color: #e8f5e9;
   color: #2e7d32;
-  padding: 0.25rem 0.5rem;
+  padding: 5px 10px;
   border-radius: 16px;
-  font-size: 0.875rem;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
 }
 
 .remove-tag {
   background: none;
   border: none;
-  color: #666;
+  color: #2e7d32;
+  margin-left: 5px;
   cursor: pointer;
-  margin-left: 4px;
-  font-size: 1rem;
-  line-height: 1;
+  font-size: 16px;
   padding: 0 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.tag-input-area {
+.tag-input-row {
   display: flex;
-  margin-bottom: 1rem;
+  gap: 10px;
 }
 
 .tag-input {
-  flex: 1;
-  padding: 0.5rem;
-  border: 1px solid #ccc;
-  border-radius: 4px 0 0 4px;
+  flex-grow: 1;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
 }
 
 .add-tag-btn {
   background-color: #2e7d32;
   color: white;
   border: none;
-  border-radius: 0 4px 4px 0;
-  padding: 0 1rem;
+  border-radius: 4px;
+  padding: 0 15px;
   cursor: pointer;
 }
 
 .popular-tags {
-  margin-top: 1rem;
+  margin-top: 15px;
 }
 
-.popular-tags p {
-  font-size: 0.875rem;
-  color: #666;
-  margin-bottom: 0.5rem;
+.popular-tags-title {
+  font-size: 14px;
+  color: #555;
+  margin-bottom: 8px;
 }
 
-.tag-cloud {
+.tag-suggestions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 8px;
 }
 
-.tag-btn {
-  background-color: #f1f8e9;
-  border: 1px solid #c5e1a5;
-  color: #558b2f;
+.tag-suggestion {
+  background-color: #f1f1f1;
+  color: #333;
+  padding: 5px 10px;
   border-radius: 16px;
-  padding: 0.25rem 0.75rem;
-  font-size: 0.875rem;
+  font-size: 14px;
   cursor: pointer;
-  transition: all 0.2s;
+  border: 1px solid transparent;
 }
 
-.tag-btn:hover {
-  background-color: #dcedc8;
+.tag-suggestion.selected {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  border-color: #2e7d32;
 }
 
-.tag-btn.selected {
-  background-color: #aed581;
-  color: #33691e;
-  border-color: #8bc34a;
+.form-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 30px;
+}
+
+.submit-btn {
+  background-color: #2e7d32;
+  color: white;
+  padding: 12px 30px;
+  font-size: 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.submit-btn:hover:not(:disabled) {
+  background-color: #1b5e20;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.submit-btn:disabled {
+  background-color: #a5d6a7;
+  cursor: not-allowed;
+}
+
+.error-message {
+  background-color: #ffebee;
+  color: #c62828;
+  padding: 10px;
+  border-radius: 4px;
+  margin-bottom: 15px;
+  font-size: 14px;
+}
+
+.success-message {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  padding: 10px;
+  border-radius: 4px;
+  margin-bottom: 15px;
+  font-size: 14px;
 }
 </style>
