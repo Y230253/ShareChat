@@ -2,13 +2,13 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <!-- SVG参照を相対パスに変更 -->
+    <!-- SVG参照をビルド時に存在する場所に変更 -->
     <link rel="icon" type="image/svg+xml" href="./vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <!-- アセットの直接参照を保証するためのスクリプト改良 -->
+    <!-- アセットの直接参照を保証するためのスクリプト修正 -->
     <script>
       window.ASSET_BASE_PATH = '';
       try {
@@ -23,17 +23,26 @@
           const baseTag = document.createElement('base');
           baseTag.href = window.ASSET_BASE_PATH;
           document.head.prepend(baseTag);
+          
+          // アイコンを明示的に設定（SVGの問題を解決）
+          setTimeout(() => {
+            const iconLink = document.querySelector('link[rel="icon"]');
+            if (iconLink) {
+              iconLink.href = window.ASSET_BASE_PATH + 'vite.svg';
+              console.log('アイコンパスを更新:', iconLink.href);
+            }
+          }, 0);
         }
       } catch (e) {
         console.error('パス検出エラー:', e);
       }
     </script>
     <title>Shacha!!</title>
-    <script type="module" crossorigin src="./assets/index.BVFfRa.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index.BBpw6n.css">
+    <script type="module" crossorigin src="./assets/index.S2ZQYR.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index.BM6HNx.css">
   </head>
   <body>
     <div id="app"></div>
-    <!-- スクリプトの参照を変更 -->
+    <!-- スクリプトの参照も相対パスに修正 -->
   </body>
 </html>

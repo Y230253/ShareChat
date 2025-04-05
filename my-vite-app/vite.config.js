@@ -1,10 +1,11 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { resolve } from 'path'
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [vue()],
-  // 認証URLでも動作するよう完全に空のbase pathを使用
+  // 相対パスを使用するよう変更
   base: '',
   build: {
     outDir: 'dist',
@@ -22,7 +23,9 @@ export default defineConfig({
         // マニュアルチャンクを無効化
         manualChunks: undefined
       }
-    }
+    },
+    // 公開ディレクトリの静的アセットもコピー
+    copyPublicDir: true
   },
   // 環境変数プレフィックス設定
   envPrefix: 'VITE_',
@@ -37,10 +40,14 @@ export default defineConfig({
       }
     }
   },
-  // 絶対パス解決の設定を追加
+  // 絶対パス解決の設定を修正 - 相対パスベースに統一
   resolve: {
     alias: {
-      '@': '/src'
+      '@': resolve(__dirname, 'src'),
+      // パブリックアセットへの直接アクセス
+      'public': resolve(__dirname, 'public')
     },
-  }
+  },
+  // パブリックディレクトリの静的アセット処理
+  publicDir: 'public',
 })
