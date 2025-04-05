@@ -243,10 +243,10 @@ const handleFile = async (file) => {
 
   fileError.value = '';
   
-  // ファイルサイズチェック (10GB上限)
-  const maxSize = 10 * 1024 * 1024 * 1024; // 10GB
+  // ファイルサイズチェック (5GB上限)
+  const maxSize = 5 * 1024 * 1024 * 1024; // 5GB
   if (file.size > maxSize) {
-    fileError.value = 'ファイルサイズが大きすぎます。10GB以下のファイルを選択してください。';
+    fileError.value = 'ファイルサイズが大きすぎます。5GB以下のファイルを選択してください。';
     return;
   }
   
@@ -260,7 +260,7 @@ const handleFile = async (file) => {
   // 大容量ファイル（100MB超）の場合は警告を表示
   const largeFileThreshold = 100 * 1024 * 1024; // 100MB
   if (file.size > largeFileThreshold) {
-    console.log('大容量ファイルが選択されました。チャンクアップロードを使用します。');
+    console.log('大容量ファイルが選択されました。通常アップロードを使用します（チャンクアップロードはまだ準備中です）');
   }
   
   // ローカルプレビュー
@@ -286,17 +286,8 @@ const handleFile = async (file) => {
       uploadProgress.value = Math.round(progress);
     };
     
-    // 実際のアップロード
-    let result;
-    
-    // 5MB以上のファイルはチャンクアップロードを使用
-    const chunkThreshold = 5 * 1024 * 1024; // 5MB
-    if (file.size > chunkThreshold) {
-      result = await uploadLargeFile(file, onProgress);
-    } else {
-      // 通常のアップロード
-      result = await api.upload(file, onProgress);
-    }
+    // 実際のアップロード - チャンクアップロードはバックエンド実装が必要なため、一時的に通常のアップロードを使用
+    const result = await api.upload(file, onProgress);
     
     if (result && result.imageUrl) {
       uploadedFileUrl.value = result.imageUrl;
@@ -310,96 +301,17 @@ const handleFile = async (file) => {
     // プレビューはそのままにする（エラー時も表示を維持）
   } finally {
     uploading.value = false;
-    // オブジェクトURLを使った場合はメモリリークを防ぐ
-    if (filePreview.value && filePreview.value.startsWith('blob:')) {
-      URL.revokeObjectURL(filePreview.value);
-    }
-  }
-};
-
-// 大容量ファイルをチャンクに分割してアップロードする関数
-const uploadLargeFile = async (file, onProgress) => {
-  const chunkSize = 2 * 1024 * 1024; // 2MBずつ送信
-  const totalChunks = Math.ceil(file.size / chunkSize);
-  let uploadedChunks = 0;
-  
-  console.log(`ファイル「${file.name}」を${totalChunks}個のチャンクに分割してアップロードします`);
-  
-  // サーバーにアップロード開始を通知
-  const sessionId = Date.now().toString() + '-' + Math.random().toString(36).substring(2, 15);
-  
-  try {
-    // アップロードセッション開始
-    const sessionResponse = await api.uploadSession.create({
-      filename: file.name,
-      fileType: file.type,
-      fileSize: file.size,
-      sessionId: sessionId,
-      totalChunks: totalChunks
-    });
     
-    if (!sessionResponse || !sessionResponse.success) {
-      throw new Error('アップロードセッションの作成に失敗しました');
-    }
-    
-    console.log(`アップロードセッション開始: ${sessionId}`);
-    
-    // チャンクのアップロード
-    for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
-      const start = chunkIndex * chunkSize;
-      const end = Math.min(start + chunkSize, file.size);
-      const chunk = file.slice(start, end);
+    // オブジェクトURLを使った場合は参照を解放（実際のURLはそのまま）
+    if (filePreview.value && typeof filePreview.value === 'string' && filePreview.value.startsWith('blob:')) {
+      // 参照を変数に保存
+      const blobUrl = filePreview.value;
       
-      // チャンクデータをフォームデータに変換
-      const formData = new FormData();
-      formData.append('chunk', chunk);
-      formData.append('sessionId', sessionId);
-      formData.append('chunkIndex', chunkIndex);
-      formData.append('totalChunks', totalChunks);
-      
-      // チャンクをアップロード
-      const chunkResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL}/upload-chunk`, {
-        method: 'POST',
-        body: formData,
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      
-      if (!chunkResponse.ok) {
-        const errorText = await chunkResponse.text();
-        throw new Error(`チャンク${chunkIndex + 1}/${totalChunks}のアップロードに失敗: ${errorText}`);
-      }
-      
-      // アップロード進捗を更新
-      uploadedChunks++;
-      const progressPercent = (uploadedChunks / totalChunks) * 100;
-      onProgress(progressPercent);
-      
-      console.log(`チャンク ${chunkIndex + 1}/${totalChunks} アップロード完了 (${progressPercent.toFixed(2)}%)`);
+      // URL.revokeObjectURLはアップロード完了後に呼び出す必要がある
+      setTimeout(() => {
+        URL.revokeObjectURL(blobUrl);
+      }, 1000);
     }
-    
-    // アップロードの完了を通知
-    const completeResponse = await api.uploadSession.complete(sessionId);
-    
-    if (!completeResponse || !completeResponse.imageUrl) {
-      throw new Error('ファイル結合処理に失敗しました');
-    }
-    
-    console.log('全チャンクのアップロード成功:', completeResponse.imageUrl);
-    return completeResponse;
-    
-  } catch (error) {
-    console.error('チャンクアップロードエラー:', error);
-    
-    // エラー時にはセッションを中止
-    try {
-      await api.uploadSession.abort(sessionId);
-    } catch (abortError) {
-      console.error('アップロードセッションの中止に失敗:', abortError);
-    }
-    
-    throw error;
   }
 };
 

@@ -63,14 +63,9 @@ const fetchBookmarkedPosts = async () => {
     console.log('ブックマークした投稿を取得中...');
     const posts = await api.bookmarks.getPosts();
     
-    // バックエンドでフィルタリングされていることを確認
-    if (Array.isArray(posts)) {
-      bookmarkedPosts.value = posts;
-      console.log(`ブックマークされた投稿を${posts.length}件取得しました`);
-    } else {
-      bookmarkedPosts.value = [];
-      console.warn('取得したブックマーク投稿が配列ではありません:', posts);
-    }
+    // BookmarkPostsの結果のみを使用する（/postsを別途呼び出さない）
+    bookmarkedPosts.value = posts;
+    console.log(`ブックマークされた投稿を${bookmarkedPosts.value.length}件取得しました`);
   } catch (err) {
     console.error("ブックマーク投稿取得エラー:", err);
     error.value = "お気に入り投稿の取得に失敗しました";
@@ -85,7 +80,7 @@ onMounted(() => {
   fetchBookmarkedPosts();
   
   // 認証状態変更のリスナーを設定
-  authChangeUnsubscribe = authStore.on('auth-change', (state) => {
+  authChangeUnsubscribe = authStore.on?.('auth-change', (state) => {
     console.log('認証状態変更を検出:', state);
     if (state.isLoggedIn) {
       fetchBookmarkedPosts();
