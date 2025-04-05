@@ -150,6 +150,12 @@ const handleVisibilityChange = entries => {
   }
 };
 
+// メディアが読み込まれた時のハンドラ - 存在していなかった関数を追加
+const handleMediaLoaded = () => {
+  isMediaLoaded.value = true;
+  console.log(`メディア読み込み完了: ${props.photo.id}`);
+};
+
 // 詳細ページに遷移
 const goToDetail = () => {
   router.push(`/detail/${props.photo.id}`);

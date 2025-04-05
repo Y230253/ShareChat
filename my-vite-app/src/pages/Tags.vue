@@ -57,11 +57,11 @@
       </div>
       
       <!-- 投稿リスト -->
-      <ul v-else :style="{ display: 'grid', gap: '1rem', gridTemplateColumns: `repeat(${columns}, 1fr)` }">
-        <li v-for="post in posts" :key="post.id">
+      <div v-else class="post-grid" :style="{ gridTemplateColumns: `repeat(${columns}, 1fr)` }">
+        <div v-for="post in posts" :key="post.id" class="post-item">
           <PhotoItem :photo="post" />
-        </li>
-      </ul>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -192,8 +192,25 @@ const fetchPosts = async () => {
     const result = await api.posts.getByTag(selectedTag.value);
     
     if (Array.isArray(result)) {
-      posts.value = result;
-      console.log(`${posts.value.length}件の投稿を取得しました`);
+      // タグでフィルタリング - 厳密なフィルタリングを適用
+      posts.value = result.filter(post => {
+        // タグが配列の場合
+        if (Array.isArray(post.tags)) {
+          return post.tags.some(tag => 
+            typeof tag === 'string' 
+              ? tag.toLowerCase() === selectedTag.value.toLowerCase()
+              : (tag.name || '').toLowerCase() === selectedTag.value.toLowerCase()
+          );
+        } 
+        // タグが文字列の場合
+        else if (typeof post.tags === 'string') {
+          return post.tags.toLowerCase().includes(selectedTag.value.toLowerCase());
+        }
+        // タグがない場合
+        return false;
+      });
+      
+      console.log(`${posts.value.length}件の投稿をフィルタリングしました`);
     } else {
       console.warn('投稿データが配列ではありません:', result);
       posts.value = [];
@@ -378,5 +395,18 @@ li {
   border-radius: 4px;
   margin-top: 15px;
   cursor: pointer;
+}
+
+/* 投稿グリッドのスタイル */
+.post-grid {
+  display: grid;
+  gap: 20px;
+  width: 100%;
+}
+
+.post-item {
+  width: 100%;
+  display: flex;
+  justify-content: center;
 }
 </style>

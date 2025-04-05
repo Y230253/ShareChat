@@ -50,8 +50,14 @@ const logout = () => {
     
     <!-- ログイン時のみ表示 -->
     <div v-else class="user-info">
-      <span class="welcome">ようこそ、{{ user?.username || user?.email }}さん</span>
-      <button class="logout" @click="logout">ログアウト</button>
+      <div class="user-menu">
+        <span class="welcome">ようこそ、{{ user?.username || user?.email }}さん</span>
+        <div class="dropdown-menu">
+          <router-link to="/profile" class="menu-item">マイプロフィール</router-link>
+          <router-link to="/edit-profile" class="menu-item">プロフィール編集</router-link>
+          <button @click="logout" class="logout menu-item">ログアウト</button>
+        </div>
+      </div>
     </div>
     
     <h1>📷 ShareChat 💬</h1>
@@ -143,5 +149,58 @@ const logout = () => {
   color: #ffffff;
   background-color: transparent;
   cursor: pointer;
+}
+
+.user-menu {
+  position: relative;
+  display: inline-block;
+}
+
+.user-menu:hover .dropdown-menu {
+  display: block;
+}
+
+.dropdown-menu {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  background-color: white;
+  min-width: 160px;
+  box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+  z-index: 1;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.menu-item {
+  display: block;
+  color: black;
+  padding: 10px 16px;
+  text-decoration: none;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+
+.menu-item:hover {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.menu-item:last-child {
+  border-bottom: none;
+}
+
+.menu-item.logout {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #c62828;
+}
+
+.menu-item.logout:hover {
+  background-color: #ffebee;
 }
 </style>

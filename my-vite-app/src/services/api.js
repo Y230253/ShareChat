@@ -255,21 +255,52 @@ const tags = {
     }
   },
   
-  // タグに関連する投稿を取得
+  // タグに関連する投稿を取得 - タグフィルタリングを強化
   getPosts: async (tagName) => {
     try {
+      console.log(`タグ "${tagName}" の投稿を取得しています...`);
       const response = await apiCall(`/posts?tag=${encodeURIComponent(tagName)}`, { method: 'GET' });
+      
+      // 返されたデータがすでにフィルタリング済みかどうかをチェック
+      if (Array.isArray(response)) {
+        // サーバーサイドでフィルタリングされていない場合は、クライアント側でフィルタリングする
+        const filteredPosts = response.filter(post => {
+          // タグのフォーマットに応じたチェック
+          if (Array.isArray(post.tags)) {
+            return post.tags.some(tag => 
+              typeof tag === 'string' 
+                ? tag.toLowerCase() === tagName.toLowerCase()
+                : (tag.name || '').toLowerCase() === tagName.toLowerCase()
+            );
+          } else if (typeof post.tags === 'string') {
+            return post.tags.toLowerCase().includes(tagName.toLowerCase());
+          }
+          return false;
+        });
+        
+        console.log(`タグ "${tagName}" で ${filteredPosts.length}/${response.length} 件の投稿をフィルタリングしました`);
+        return filteredPosts;
+      }
+      
       return response;
     } catch (error) {
-      console.error(`タグ${tagName}の投稿取得エラー:`, error);
+      console.error(`タグ "${tagName}" の投稿取得エラー:`, error);
       // モックデータからタグに関連する投稿をフィルタリングして返す
-      return mockPosts.filter(post => 
-        post.tags && post.tags.some(tag => 
-          typeof tag === 'string' 
-            ? tag.toLowerCase() === tagName.toLowerCase()
-            : (tag.name || '').toLowerCase() === tagName.toLowerCase()
-        )
-      );
+      const filteredMockPosts = mockPosts.filter(post => {
+        if (Array.isArray(post.tags)) {
+          return post.tags.some(tag => 
+            typeof tag === 'string' 
+              ? tag.toLowerCase() === tagName.toLowerCase()
+              : (tag.name || '').toLowerCase() === tagName.toLowerCase()
+          );
+        } else if (typeof post.tags === 'string') {
+          return post.tags.toLowerCase().includes(tagName.toLowerCase());
+        }
+        return false;
+      });
+      
+      console.log(`モックデータから ${filteredMockPosts.length} 件の投稿を返します`);
+      return filteredMockPosts;
     }
   }
 };
@@ -291,7 +322,9 @@ export const api = {
     }),
     delete: (id) => apiCall(`/posts/${id}`, { 
       method: 'DELETE' 
-    })
+    }),
+    // ユーザーの投稿を取得
+    getUserPosts: () => apiCall('/user-posts')
   },
   
   // いいね関連
@@ -350,7 +383,13 @@ export const api = {
     logout: () => apiCall('/auth/logout', { 
       method: 'POST' 
     }),
-    getUser: () => apiCall('/auth/me')
+    getUser: () => apiCall('/auth/me'),
+    
+    // プロフィール更新機能を追加
+    updateProfile: (profileData) => apiCall('/auth/profile', {
+      method: 'PUT',
+      body: profileData
+    }),
   },
   
   // ファイルアップロード
