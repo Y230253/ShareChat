@@ -236,7 +236,9 @@ export const api = {
     remove: (postId) => apiCall('/bookmarks', { 
       method: 'DELETE', 
       body: { post_id: postId } 
-    })
+    }),
+    // ブックマークした投稿を取得するエンドポイントを追加
+    getPosts: () => apiCall('/bookmarked-posts')
   },
 
   // お気に入り関連
@@ -254,7 +256,9 @@ export const api = {
   // タグ関連
   tags: {
     getAll: () => apiCall('/tags'),
-    getByName: (name) => apiCall(`/tags/${name}`)
+    getByName: (name) => apiCall(`/tags/${name}`),
+    // タグでフィルタリングされた投稿を取得するメソッドを追加
+    getPostsByTag: (tagName) => apiCall(`/posts-by-tag/${encodeURIComponent(tagName)}`)
   },
   
   // 認証関連

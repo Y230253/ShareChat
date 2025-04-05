@@ -1116,6 +1116,90 @@ app.delete('/bookmarks', authenticateToken, async (req, res) => {
   }
 });
 
+// ブックマークした投稿を取得するエンドポイント
+app.get('/bookmarked-posts', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const data = await readData();
+    
+    // ブックマーク配列の初期化チェック
+    if (!Array.isArray(data.bookmarks)) {
+      data.bookmarks = [];
+      await writeData(data);
+      return res.json([]);
+    }
+    
+    // このユーザーがブックマークした投稿IDを取得
+    const bookmarkedPostIds = data.bookmarks
+      .filter(bookmark => bookmark.user_id === userId)
+      .map(bookmark => bookmark.post_id);
+    
+    // 投稿配列の初期化チェック
+    if (!Array.isArray(data.posts)) {
+      return res.json([]);
+    }
+    
+    // ブックマークした投稿を取得
+    const bookmarkedPosts = data.posts.filter(post => 
+      bookmarkedPostIds.includes(post.id)
+    );
+    
+    // ブックマーク順にソート（新しい順）
+    bookmarkedPosts.sort((a, b) => {
+      const bookmarkA = data.bookmarks.find(
+        bookmark => bookmark.user_id === userId && bookmark.post_id === a.id
+      );
+      const bookmarkB = data.bookmarks.find(
+        bookmark => bookmark.user_id === userId && bookmark.post_id === b.id
+      );
+      
+      return new Date(bookmarkB.created_at) - new Date(bookmarkA.created_at);
+    });
+    
+    res.json(bookmarkedPosts);
+  } catch (err) {
+    console.error('ブックマーク投稿取得エラー:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+// タグでフィルタリングされた投稿を取得するエンドポイント
+app.get('/posts-by-tag/:tagName', async (req, res) => {
+  try {
+    const tagName = req.params.tagName.toLowerCase();
+    console.log(`タグ「${tagName}」の投稿をフィルタリング`);
+    
+    const data = await readData();
+    
+    // タグでフィルタリング
+    const filteredPosts = data.posts.filter(post => 
+      Array.isArray(post.tags) && 
+      post.tags.some(tag => tag.toLowerCase() === tagName)
+    );
+    
+    // 投稿日時の降順でソート
+    filteredPosts.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    
+    // ユーザー情報を付加
+    const postsWithUserInfo = await Promise.all(filteredPosts.map(async (post) => {
+      // ユーザーデータを取得
+      const userData = await readUserData();
+      const user = userData.users.find(u => u.id === post.user_id);
+      
+      return {
+        ...post,
+        username: user ? user.username : `ユーザー${post.user_id}`,
+        user_icon: user ? user.icon_url : null
+      };
+    }));
+    
+    res.json(postsWithUserInfo);
+  } catch (err) {
+    console.error('タグ別投稿取得エラー:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
 // すべての他のリクエストをindex.htmlにリダイレクト（SPAルーティング用）
 // ※必ず他のルートの最後に配置
 app.get('*', (req, res) => {

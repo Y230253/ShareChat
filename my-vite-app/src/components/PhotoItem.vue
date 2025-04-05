@@ -2,10 +2,10 @@
 import { defineProps, ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import authStore from '../authStore.js'
-import { api } from '../services/api.js'  // APIサービスをインポート
+import { api } from '../services/api.js'  // APIサービスを正しくインポート
 
 const props = defineProps({
-  photo: Object // 投稿情報
+  photo: Object
 })
 
 const router = useRouter()
@@ -23,9 +23,9 @@ const isMediaLoaded = ref(false)
 
 // いいね機能
 const liked = ref(false)
-const likeCount = ref(props.photo.likeCount || 0)
+const likeCount = ref(props.photo?.likeCount || 0)
 
-// API経由でいいね機能を実装
+// いいね機能の処理
 const toggleLike = async () => {
   // ログインチェック
   if (!isLoggedIn.value) {
@@ -38,30 +38,32 @@ const toggleLike = async () => {
   }
 
   try {
-    if(liked.value) {
-      // いいね解除 - APIサービスを使用
+    console.log(`いいね処理: postId = ${props.photo.id}, 現在の状態 = ${liked.value}`);
+    
+    if (liked.value) {
+      // いいね解除 - APIサービス経由で呼び出し
       await api.likes.remove(props.photo.id);
       liked.value = false;
-      likeCount.value = Math.max(likeCount.value - 1, 0);
+      likeCount.value = Math.max(0, likeCount.value - 1);
     } else {
-      // いいね追加 - APIサービスを使用
+      // いいね追加 - APIサービス経由で呼び出し
       await api.likes.add(props.photo.id);
       liked.value = true;
       likeCount.value++;
     }
   } catch (err) {
     console.error("いいね処理中エラー", err);
-    errorMsg.value = "処理中にエラーが発生しました";
+    errorMsg.value = "いいね処理中にエラーが発生しました";
     setTimeout(() => errorMsg.value = '', 3000);
   }
 }
 
 // ブックマーク機能
 const isBookmarked = ref(false)
-const bookmarkCount = ref(props.photo.bookmarkCount || 0)
+const bookmarkCount = ref(props.photo?.bookmarkCount || 0)
 
-// API経由でブックマーク機能を実装
-const toggleBookmarkAction = async () => {
+// ブックマーク処理
+const toggleBookmark = async () => {
   // ログインチェック
   if (!isLoggedIn.value) {
     errorMsg.value = 'ブックマークするにはログインが必要です'
@@ -73,20 +75,22 @@ const toggleBookmarkAction = async () => {
   }
   
   try {
-    if(isBookmarked.value) {
-      // ブックマーク解除 - APIサービスを使用
+    console.log(`ブックマーク処理: postId = ${props.photo.id}, 現在の状態 = ${isBookmarked.value}`);
+    
+    if (isBookmarked.value) {
+      // ブックマーク解除 - APIサービス経由で呼び出し
       await api.bookmarks.remove(props.photo.id);
       isBookmarked.value = false;
-      bookmarkCount.value = Math.max(bookmarkCount.value - 1, 0);
+      bookmarkCount.value = Math.max(0, bookmarkCount.value - 1);
     } else {
-      // ブックマーク追加 - APIサービスを使用
+      // ブックマーク追加 - APIサービス経由で呼び出し
       await api.bookmarks.add(props.photo.id);
       isBookmarked.value = true;
       bookmarkCount.value++;
     }
   } catch (err) {
     console.error("ブックマーク処理中エラー", err);
-    errorMsg.value = "処理中にエラーが発生しました";
+    errorMsg.value = "ブックマーク処理中にエラーが発生しました";
     setTimeout(() => errorMsg.value = '', 3000);
   }
 }
@@ -96,7 +100,8 @@ const userIconUrl = computed(() => {
   if (props.photo.user_icon) {
     return props.photo.user_icon;
   }
-  return 'https://via.placeholder.com/40'; // デフォルトアイコン
+  // 信頼できる画像サーバーを使用
+  return 'https://ui-avatars.com/api/?name=' + (props.photo.username || 'User') + '&background=random';
 });
 
 // メッセージ省略用の定数
@@ -118,49 +123,37 @@ const isLongMessage = computed(() => {
   return props.photo.message && props.photo.message.length > MAX_MESSAGE_LENGTH;
 })
 
-// Intersection Observer インスタンス
+// Intersection Observer のインスタンス
 let observer = null;
 
-// 動画再生の制御
-const handleVisibilityChange = (entries) => {
-  const entry = entries[0];
-  isVisible.value = entry.isIntersecting;
-  
-  if (props.photo.isVideo && mediaRef.value) {
-    if (entry.isIntersecting) {
-      // 画面内に表示された場合、動画を再生
-      try {
-        const playPromise = mediaRef.value.play();
-        // play() がPromiseを返す場合（モダンブラウザ）はエラーハンドリング
-        if (playPromise !== undefined) {
-          playPromise.catch(error => {
-            // 自動再生ポリシーによるエラーを無視（ユーザー操作が必要な場合がある）
-            console.log('自動再生できません:', error);
-          });
-        }
-      } catch (e) {
-        console.log('再生エラー:', e);
-      }
-    } else {
-      // 画面外に出た場合、動画を一時停止
-      try {
-        mediaRef.value.pause();
-      } catch (e) {
-        console.log('一時停止エラー:', e);
+// 表示状態の変更処理
+const handleVisibilityChange = entries => {
+  for (const entry of entries) {
+    isVisible.value = entry.isIntersecting;
+    
+    // 表示されたら、遅延読み込みを行う
+    if (isVisible.value && !isMediaLoaded.value && mediaRef.value) {
+      // 実際のsrcを設定
+      if (props.photo.isVideo) {
+        mediaRef.value.src = props.photo.image_url;
+      } else {
+        const img = new Image();
+        img.onload = () => {
+          if (mediaRef.value) {
+            mediaRef.value.src = props.photo.image_url;
+            isMediaLoaded.value = true;
+          }
+        };
+        img.src = props.photo.image_url;
       }
     }
   }
 };
 
-// メディアの読み込み完了イベントハンドラ
-const handleMediaLoaded = () => {
-  isMediaLoaded.value = true;
-};
-
-// 詳細ページへのナビゲーション
+// 詳細ページに遷移
 const goToDetail = () => {
   router.push(`/detail/${props.photo.id}`);
-}
+};
 
 // 初期化
 onMounted(() => {
@@ -169,54 +162,55 @@ onMounted(() => {
   
   // Intersection Observer の設定
   observer = new IntersectionObserver(handleVisibilityChange, {
-    root: null, // ビューポートをルートとする
-    threshold: 0.1 // 10%以上表示されたら検知
+    root: null,
+    threshold: 0.1
   });
   
   if (mediaRef.value) {
     observer.observe(mediaRef.value);
   }
   
-  // いいね・ブックマーク状態の確認
+  // いいね・ブックマーク状態を確認
   checkUserInteractions();
   
   // 認証状態の変化を監視
   authStore.$subscribe((_, state) => {
     isLoggedIn.value = state.isLoggedIn;
-    // 認証状態が変わったら再チェック
     if (state.isLoggedIn) {
       checkUserInteractions();
     }
   });
 });
 
-// いいね・ブックマーク状態のチェック - APIサービスを使用
+// いいね・ブックマーク状態のチェック
 const checkUserInteractions = async () => {
-  if (!isLoggedIn.value) return;
+  if (!isLoggedIn.value || !props.photo) return;
   
   try {
-    // チェックAPIを直接呼び出す代わりにAPIサービスを使用
-    const [likeData, bookmarkData] = await Promise.allSettled([
+    // 両方の状態を並行して取得
+    const [likeStatus, bookmarkStatus] = await Promise.allSettled([
       api.likes.check(props.photo.id),
       api.bookmarks.check(props.photo.id)
     ]);
     
     // いいね状態を設定
-    if (likeData.status === 'fulfilled' && likeData.value) {
-      liked.value = likeData.value.liked || false;
+    if (likeStatus.status === 'fulfilled' && likeStatus.value) {
+      liked.value = likeStatus.value.liked;
+      console.log(`いいね状態取得: ${props.photo.id} => ${liked.value}`);
     }
     
     // ブックマーク状態を設定
-    if (bookmarkData.status === 'fulfilled' && bookmarkData.value) {
-      isBookmarked.value = bookmarkData.value.bookmarked || false;
+    if (bookmarkStatus.status === 'fulfilled' && bookmarkStatus.value) {
+      isBookmarked.value = bookmarkStatus.value.bookmarked;
+      console.log(`ブックマーク状態取得: ${props.photo.id} => ${isBookmarked.value}`);
     }
   } catch (err) {
     console.error("状態チェックエラー:", err);
   }
 };
 
-// クリーンアップ
 onUnmounted(() => {
+  // Observer の解除
   if (observer && mediaRef.value) {
     observer.unobserve(mediaRef.value);
     observer.disconnect();
@@ -289,11 +283,12 @@ onUnmounted(() => {
       <button @click.stop="toggleLike" :class="{ 'active': liked }">
         {{ liked ? '❤️' : '🤍' }} ({{ likeCount }})
       </button>
-      <button @click.stop="toggleBookmarkAction" :class="{ 'active': isBookmarked }">
+      <button @click.stop="toggleBookmark" :class="{ 'active': isBookmarked }">
         {{ isBookmarked ? '📌' : '🔖' }} ({{ bookmarkCount }})
       </button>
     </div>
   </div>
+  <div class="error-message" v-if="errorMsg">{{ errorMsg }}</div>
 </template>
 
 <style scoped>
@@ -470,5 +465,14 @@ button.active {
 .actions button {
   position: relative;
   z-index: 2;
+}
+
+.error-message {
+  background-color: rgba(255, 0, 0, 0.1);
+  color: #c00;
+  padding: 8px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+  text-align: center;
 }
 </style>
