@@ -319,12 +319,12 @@ const tags = {
 
 // 必要に応じてAPI関数をラップ
 const auth = {
-  // ...existing auth methods...
+  // 既存のメソッド
   
   getUser: async () => {
     console.log('API: Getting user data');
     try {
-      const response = await withTimeout(api.auth.getUser());
+      const response = await apiCall('/user', { method: 'GET' });
       console.log('API: User data received', response);
       return response;
     } catch (err) {
@@ -336,14 +336,29 @@ const auth = {
   updateProfile: async (data) => {
     console.log('API: Updating profile', data);
     try {
-      const response = await withTimeout(api.auth.updateProfile(data));
+      // エンドポイントを修正 - UserEdit.vueと一致させる
+      const response = await apiCall('/profile', { 
+        method: 'PUT',
+        body: data
+      });
       console.log('API: Profile updated successfully');
       return response;
     } catch (err) {
       console.error('API: Failed to update profile', err);
       throw err;
     }
-  }
+  },
+
+  login: async (credentials) => { /* ... */ },
+  register: async (userData) => { /* ... */ },
+  // 以下のようなプロフィール更新メソッドが実装されていると想定
+  updateProfile: async (profileData) => {
+    console.log('API: Updating profile', profileData);
+    return await apiCall('/user/profile', {
+      method: 'PUT',
+      body: profileData
+    });
+  },
 };
 
 const posts = {

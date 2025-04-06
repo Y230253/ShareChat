@@ -12,6 +12,9 @@ import PostFormPage from './pages/PostForm.vue'
 import DetailPostPage from './pages/detailPost.vue'
 import FavoritePage from './pages/Favorite.vue'
 import TagsPage from './pages/Tags.vue'
+import ProfilePage from './pages/Profile.vue'
+import EditProfilePage from './pages/EditProfile.vue'
+
 // User.vueは存在しないため削除
 
 // ルート定義
@@ -22,6 +25,8 @@ const routes = [
   { path: '/detail/:id', component: DetailPostPage },
   { path: '/favorite', component: FavoritePage },
   { path: '/tags', component: TagsPage },
+  { path: '/profile', component: ProfilePage },
+  { path: '/edit-profile', component: EditProfilePage },
   // User.vueへのルートも削除
 ]
 
@@ -49,19 +54,20 @@ console.log(`Current ENV: ${import.meta.env.MODE}`);
 console.log(`App initializing with build timestamp: ${new Date().toISOString()}`);
 console.log(`API Plugin initialized with base URL: ${import.meta.env.VITE_API_BASE_URL}`);
 
-// 認証情報の初期化
-authStore.initAuth();
-console.log('認証状態:', authStore.isLoggedIn.value ? 'ログイン済み' : '未ログイン');
-
 // アプリ作成とマウント
 const app = createApp(App);
 app.use(router);
 app.mount('#app');
 
-// デバッグ用グローバル変数
-if (import.meta.env.DEV) {
-  window.authStore = authStore;
-}
+// グローバルエラーハンドラーを追加
+app.config.errorHandler = (err, instance, info) => {
+  console.error('Vue Error:', err);
+  console.error('Error Component:', instance);
+  console.error('Error Info:', info);
+};
+
+// デバッグ用グローバル変数 - 常に利用可能にする（環境問わず）
+window.authStore = authStore;
 
 // 初期化完了
 console.log('App initialization complete!');

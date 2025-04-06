@@ -261,7 +261,7 @@ const saveChanges = async () => {
     };
     
     // API呼び出しでプロフィールを更新
-    await api.auth.updateProfile(profileData);
+    const updatedProfile = await api.auth.updateProfile(profileData);
     
     // 成功した場合、authStoreのユーザー情報を更新
     const updatedUser = {

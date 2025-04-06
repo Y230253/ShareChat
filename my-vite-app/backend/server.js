@@ -1468,6 +1468,46 @@ setInterval(() => {
   }
 }, 3600000); // 1時間ごとに実行
 
+// ユーザープロフィール更新API
+app.put('/user/profile', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { username, avatar } = req.body;
+    
+    console.log(`プロフィール更新: userId=${userId}, username=${username}, avatar=${avatar ? avatar.substring(0, 30) + '...' : 'なし'}`);
+    
+    if (!username) {
+      return res.status(400).json({ error: 'ユーザー名は必須です' });
+    }
+    
+    const userData = await readUserData();
+    const userIndex = userData.users.findIndex(u => u.id === userId);
+    
+    if (userIndex === -1) {
+      return res.status(404).json({ error: 'ユーザーが見つかりません' });
+    }
+    
+    // ユーザー情報を更新
+    userData.users[userIndex].username = username;
+    
+    // アバター画像のURLが指定された場合は更新
+    if (avatar !== undefined) {
+      userData.users[userIndex].icon_url = avatar;
+    }
+    
+    await writeUserData(userData);
+    
+    // パスワードを除外したユーザー情報を返す
+    const { password, ...userWithoutPassword } = userData.users[userIndex];
+    
+    console.log(`プロフィール更新成功: userId=${userId}`);
+    res.json(userWithoutPassword);
+  } catch (err) {
+    console.error('プロフィール更新エラー:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました: ' + err.message });
+  }
+});
+
 // サーバー起動時にデータ構造を確認
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, async () => {

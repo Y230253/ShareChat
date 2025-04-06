@@ -30,15 +30,21 @@ const initAuth = () => {
 
 // ユーザーセット関数
 const setUser = (userData) => {
-  if (!userData || !userData.token) {
+  if (!userData) {
     console.error('Cannot set user: Invalid user data', userData);
     return;
   }
   
   console.log('Setting user:', userData.email || userData.username);
   user.value = userData;
+  
+  // tokenがあれば保存
+  if (userData.token) {
+    localStorage.setItem('token', userData.token);
+  }
+  
+  // ユーザー情報をローカルストレージに保存
   localStorage.setItem('user', JSON.stringify(userData));
-  localStorage.setItem('token', userData.token);
   console.log('User data saved to localStorage');
 };
 
