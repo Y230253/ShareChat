@@ -6,24 +6,23 @@ const isLoggedIn = computed(() => !!user.value);
 
 // ローカルストレージからユーザー情報を取得する初期化関数
 const initAuth = () => {
-  console.log('認証初期化開始');
+  console.log('Initializing auth state');
   const storedUser = localStorage.getItem('user');
   const token = localStorage.getItem('token');
   
   if (storedUser && token) {
     try {
       user.value = JSON.parse(storedUser);
-      console.log('認証情報の復元に成功:', user.value.email || user.value.username);
+      console.log('Auth restored successfully for:', user.value.email || user.value.username);
     } catch (e) {
       console.error('保存されたユーザー情報の解析に失敗しました:', e);
       localStorage.removeItem('user');
       localStorage.removeItem('token');
     }
   } else {
-    console.log('保存された認証情報が見つかりません');
-    if (!token && user.value) {
-      // トークンがないのにユーザー情報があれば無効化
-      console.warn('トークンがないためユーザー情報をクリア');
+    console.log('No stored auth credentials found');
+    if (user.value && !token) {
+      console.warn('User info exists but no token, clearing user state');
       user.value = null;
     }
   }
@@ -32,14 +31,15 @@ const initAuth = () => {
 // ユーザーセット関数
 const setUser = (userData) => {
   if (!userData || !userData.token) {
-    console.error('無効なユーザーデータ:', userData);
+    console.error('Cannot set user: Invalid user data', userData);
     return;
   }
   
+  console.log('Setting user:', userData.email || userData.username);
   user.value = userData;
   localStorage.setItem('user', JSON.stringify(userData));
-  localStorage.setItem('token', userData.token); // トークンも別途保存
-  console.log('ユーザー情報を保存しました:', userData.email || userData.username);
+  localStorage.setItem('token', userData.token);
+  console.log('User data saved to localStorage');
 };
 
 // ログアウト関数

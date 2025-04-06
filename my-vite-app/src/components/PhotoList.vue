@@ -134,13 +134,11 @@ watch(() => props.photos, (newPhotos) => {
       <p>{{ error }}</p>
       <button @click="loadPosts">再読み込み</button>
     </div>
-    
     <ul v-else :style="{ display: 'grid', gap: '1rem', gridTemplateColumns: `repeat(${columns}, 1fr)` }">
-      <li v-for="photo in visiblePosts" :key="photo.id">
-        <photoItem :photo="photo" />
+      <li v-for="photo in [...visiblePosts].reverse()" :key="photo.id">
+      <photoItem :photo="photo" />
       </li>
     </ul>
-    
     <!-- もっと読み込むボタン（オプション） -->
     <div v-if="visiblePostCount < (props.photos.length > 0 ? props.photos.length : photosData.length)" class="load-more">
       <button @click="visiblePostCount += batchSize">もっと見る</button>

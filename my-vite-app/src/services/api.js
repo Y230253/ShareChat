@@ -324,7 +324,11 @@ export const api = {
       method: 'DELETE' 
     }),
     // ユーザーの投稿を取得
-    getUserPosts: () => apiCall('/user-posts')
+    getUserPosts: () => apiCall('/user-posts'),
+    // ユーザー自身の投稿を取得する関数を追加
+    getUserPosts: () => apiCall('/user/posts', { 
+      method: 'GET'
+    })
   },
   
   // いいね関連
@@ -390,6 +394,9 @@ export const api = {
       method: 'PUT',
       body: profileData
     }),
+    
+    // ユーザー情報取得
+    getUser: () => apiCall('/auth/me')
   },
   
   // ファイルアップロード

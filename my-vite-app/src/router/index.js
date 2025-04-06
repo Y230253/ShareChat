@@ -8,18 +8,17 @@ import Register from '../views/Register.vue';
 import Profile from '../views/Profile.vue';
 import PostDetail from '../views/PostDetail.vue';
 import NotFound from '../views/NotFound.vue';
-import UserRegister from '../pages/UserRegister.vue'; // UserRegisterのインポートを追加
-import UserEdit from '../views/UserEdit.vue'; // ユーザー編集ページをインポート
+import UserRegister from '../pages/UserRegister.vue';
+import EditProfile from '../views/EditProfile.vue';
 
 const routes = [
   { path: '/', component: Home },
   { path: '/login', component: Login },
   { path: '/register', component: Register },
-  // UserRegisterへのルートを追加
   { path: '/user-register', component: UserRegister },
   { path: '/profile', component: Profile, meta: { requiresAuth: true } },
-  // ユーザー編集ページへのルートを追加
-  { path: '/edit-profile', component: UserEdit, meta: { requiresAuth: true } },
+  // 重複定義を解消し、一つだけ設定
+  { path: '/edit-profile', component: EditProfile, meta: { requiresAuth: true } },
   { path: '/posts/:id', component: PostDetail },
   { path: '/:pathMatch(.*)*', component: NotFound }
 ];

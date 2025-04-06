@@ -72,7 +72,10 @@ const userInitials = computed(() => {
 });
 
 onMounted(async () => {
+  console.log('Profile page mounted');
+  
   if (!authStore.isLoggedIn.value) {
+    console.error('Not logged in, redirecting to login page');
     error.value = 'ログインが必要です';
     setTimeout(() => {
       router.push('/login');
@@ -85,11 +88,14 @@ onMounted(async () => {
     
     // ユーザー情報の取得
     user.value = authStore.user.value || {};
+    console.log('Loaded user:', user.value);
     
     // ユーザーの投稿を取得
     try {
+      console.log('Fetching user posts...');
       const posts = await api.posts.getUserPosts();
       userPosts.value = Array.isArray(posts) ? posts : [];
+      console.log(`Loaded ${userPosts.value.length} posts`);
     } catch (postsError) {
       console.error('投稿の取得に失敗しました:', postsError);
       // 投稿の取得に失敗しても、プロフィール自体は表示する
