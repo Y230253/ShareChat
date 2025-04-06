@@ -16,9 +16,18 @@ const routes = [
   { path: '/login', component: Login },
   { path: '/register', component: Register },
   { path: '/user-register', component: UserRegister },
-  { path: '/profile', component: Profile, meta: { requiresAuth: true } },
-  // 重複定義を解消し、一つだけ設定
-  { path: '/edit-profile', component: EditProfile, meta: { requiresAuth: true } },
+  {
+    path: '/profile',
+    name: 'Profile',
+    component: () => import('../views/Profile.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/edit-profile',
+    name: 'EditProfile',
+    component: () => import('../views/EditProfile.vue'),
+    meta: { requiresAuth: true }
+  },
   { path: '/posts/:id', component: PostDetail },
   { path: '/:pathMatch(.*)*', component: NotFound }
 ];
@@ -28,26 +37,25 @@ const router = createRouter({
   routes
 });
 
-// 認証チェックのナビゲーションガード
+// ナビゲーションガード
 router.beforeEach((to, from, next) => {
-  console.log(`ナビゲーション: ${from.path} -> ${to.path}`);
+  console.log('Route change:', from.path, '->', to.path);
   
-  // 認証状態を初期化
-  authStore.initAuth();
-  
-  // ログイン必須のページへのアクセスをチェック
-  if (to.meta.requiresAuth) {
-    if (authStore.isLoggedIn.value && authStore.hasToken()) {
-      console.log('認証済みユーザー: アクセス許可');
-      next();
-    } else {
-      console.warn('認証が必要: ログインページへリダイレクト');
-      next({ path: '/login', query: { redirect: to.fullPath } });
+  // 認証が必要なルートの場合
+  if (to.matched.some(record => record.meta.requiresAuth)) {
+    console.log('Checking authentication for protected route:', to.path);
+    console.log('Auth state:', authStore.isLoggedIn.value ? 'logged in' : 'not logged in');
+    
+    if (!authStore.isLoggedIn.value) {
+      console.warn('Authentication required for', to.path, 'but user is not logged in');
+      next({ name: 'Login', query: { redirect: to.fullPath } });
+      return;
     }
-  } else {
-    // 認証不要ページはそのまま表示
-    next();
   }
+  
+  // 正常に次のルートへ進む
+  console.log('Proceeding to route:', to.path);
+  next();
 });
 
 export default router;

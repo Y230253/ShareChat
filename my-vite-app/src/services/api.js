@@ -24,6 +24,18 @@ function getAuthHeader() {
   return { 'Authorization': `Bearer ${token}` };
 }
 
+// APIリクエストにタイムアウト機能を追加
+const withTimeout = (promise, ms = 10000) => {
+  const timeout = new Promise((_, reject) => {
+    const id = setTimeout(() => {
+      clearTimeout(id);
+      reject(new Error(`リクエストがタイムアウトしました (${ms}ms)`));
+    }, ms);
+  });
+
+  return Promise.race([promise, timeout]);
+};
+
 // API呼び出し関数
 export async function apiCall(endpoint, options = {}) {
   // URLの正規化（localhostへの参照を避ける）
@@ -305,6 +317,51 @@ const tags = {
   }
 };
 
+// 必要に応じてAPI関数をラップ
+const auth = {
+  // ...existing auth methods...
+  
+  getUser: async () => {
+    console.log('API: Getting user data');
+    try {
+      const response = await withTimeout(api.auth.getUser());
+      console.log('API: User data received', response);
+      return response;
+    } catch (err) {
+      console.error('API: Failed to get user data', err);
+      throw err;
+    }
+  },
+  
+  updateProfile: async (data) => {
+    console.log('API: Updating profile', data);
+    try {
+      const response = await withTimeout(api.auth.updateProfile(data));
+      console.log('API: Profile updated successfully');
+      return response;
+    } catch (err) {
+      console.error('API: Failed to update profile', err);
+      throw err;
+    }
+  }
+};
+
+const posts = {
+  // ...existing posts methods...
+  
+  getUserPosts: async (params) => {
+    console.log('API: Getting user posts with params', params);
+    try {
+      const response = await withTimeout(api.posts.getUserPosts(params));
+      console.log('API: User posts received', response);
+      return response;
+    } catch (err) {
+      console.error('API: Failed to get user posts', err);
+      throw err;
+    }
+  }
+};
+
 // API集約オブジェクト
 export const api = {
   posts: {
@@ -375,29 +432,7 @@ export const api = {
   tags,
   
   // 認証関連
-  auth: {
-    login: (credentials) => apiCall('/auth/login', { 
-      method: 'POST', 
-      body: credentials
-    }),
-    register: (userData) => apiCall('/auth/register', { 
-      method: 'POST', 
-      body: userData
-    }),
-    logout: () => apiCall('/auth/logout', { 
-      method: 'POST' 
-    }),
-    getUser: () => apiCall('/auth/me'),
-    
-    // プロフィール更新機能を追加
-    updateProfile: (profileData) => apiCall('/auth/profile', {
-      method: 'PUT',
-      body: profileData
-    }),
-    
-    // ユーザー情報取得
-    getUser: () => apiCall('/auth/me')
-  },
+  auth,
   
   // ファイルアップロード
   upload: (file, onProgress) => uploadFile(file, onProgress),

@@ -46,6 +46,15 @@ const routes = [
     component: DetailPost, 
     meta: { layout: 'default', showPhotoList: false, timestamp: buildTimestamp } 
   },
+  {
+    path: '/edit-profile',
+    compponent: () => import('../src/pages/EditProfile.vue'),
+    meta: { layout: 'default', showPhotoList: false, timestamp: buildTimestamp }
+  },
+  {
+    path: '/profile',
+    component: () => import('../src/pages/Profile.vue'),
+  },
   // キャッチオールルート - 404ページへのリダイレクト
   { 
     path: '/:pathMatch(.*)*', 
