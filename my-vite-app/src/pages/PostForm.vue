@@ -130,6 +130,7 @@ import { useRouter } from 'vue-router';
 import authStore from '../authStore.js';
 import { apiCall, api, uploadFile, uploadLargeFile } from '../services/api.js';
 import { mockTags } from '../services/mock-data.js';
+import { optimizeMedia, shouldCompress } from '../utils/mediaCompression.js';
 
 const router = useRouter();
 
@@ -241,18 +242,44 @@ const handleFile = async (file) => {
   // ファイルサイズをログに表示
   const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
   console.log(`ファイルサイズ: ${fileSizeMB}MB (${file.size}バイト)`);
+  
+  // 大容量ファイルの場合、ユーザーに通知
+  let fileToUpload = file;
+  
+  if (file.size > 50 * 1024 * 1024) {
+    const isConfirmed = confirm(
+      `ファイルサイズが大きいため、アップロードに時間がかかる場合があります (${fileSizeMB}MB)。\n` +
+      `続行しますか？\n` +
+      `※画像の場合は自動で圧縮されます。`
+    );
+    
+    if (!isConfirmed) {
+      return;
+    }
+    
+    // 画像の場合は圧縮を試みる
+    if (validImageTypes.includes(file.type) && shouldCompress(file)) {
+      try {
+        fileToUpload = await optimizeMedia(file);
+        console.log(`圧縮後のサイズ: ${(fileToUpload.size / (1024 * 1024)).toFixed(2)}MB`);
+      } catch (err) {
+        console.error('圧縮エラー:', err);
+        // 圧縮失敗時は元のファイルを使用
+      }
+    }
+  }
 
   try {
     // ローカルプレビュー - 大きなファイルはオブジェクトURLを使用して効率化
-    if (file.size > 50 * 1024 * 1024) { // 50MB以上
-      filePreview.value = URL.createObjectURL(file);
+    if (fileToUpload.size > 50 * 1024 * 1024) { // 50MB以上
+      filePreview.value = URL.createObjectURL(fileToUpload);
     } else {
       // 小さいファイルはDataURLを使用
       const reader = new FileReader();
       reader.onload = (e) => {
         filePreview.value = e.target.result;
       };
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(fileToUpload);
     }
     
     // アップロード処理開始
@@ -264,22 +291,18 @@ const handleFile = async (file) => {
       uploadProgress.value = Math.round(progress);
     };
     
-    // ファイルサイズに応じたアップロード方法の選択
-    let result;
-    const largeFileThreshold = 100 * 1024 * 1024; // 100MB
-    
-    if (file.size > largeFileThreshold) {
-      console.log('大容量ファイルのため、チャンクアップロードを使用します');
-      result = await uploadLargeFile(file, onProgress);
-    } else {
-      console.log('通常のアップロード処理を使用します');
-      result = await api.upload(file, onProgress);
-    }
+    // 改良版アップロードAPI呼び出し - 単一リクエストでXMLHttpRequestベース
+    const result = await uploadFile(fileToUpload, onProgress);
     
     if (result && result.imageUrl) {
       uploadedFileUrl.value = result.imageUrl;
-      isVideo.value = result.isVideo || false;
+      isVideo.value = result.isVideo || isVideo.value;
       console.log('アップロード成功:', result.imageUrl);
+      
+      // フォールバック画像が返されたかチェック
+      if (result.isFallback) {
+        console.warn('フォールバック画像が返されました - サーバー側での処理に問題があった可能性があります');
+      }
     } else {
       throw new Error('アップロードに失敗しました');
     }

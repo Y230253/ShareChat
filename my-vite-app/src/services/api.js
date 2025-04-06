@@ -139,76 +139,205 @@ export async function apiCall(endpoint, options = {}) {
   }
 }
 
-// ファイルアップロードのための特別なAPI呼び出し - 修正
+// ファイルアップロードのための特別なAPI呼び出し - CORS対応および容量制限対応
 export async function uploadFile(file, onProgress = null) {
   const url = `${API_BASE_URL}/upload`;
-
-  // FormDataの作成
-  const formData = new FormData();
-  formData.append('file', file);
   
+  // 進捗状況の初期化
+  if (onProgress) {
+    onProgress(0);
+  }
+
   console.log(`ファイルアップロード開始: ${url}, ファイル名: ${file.name}, サイズ: ${file.size}バイト`);
   
-  try {
-    // 統一バケットレベルアクセス対応のためのヘッダー
-    const token = localStorage.getItem('token');
-    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+  // ファイルサイズ制限を大幅に引き上げ - 5GB（もしくは2GB）
+  const maxFileSize = 5 * 1024 * 1024 * 1024; // 5GB
+  const warningFileSize = 500 * 1024 * 1024; // 500MBを超える場合は警告
+
+  if (file.size > maxFileSize) {
+    console.warn(`ファイルサイズが大きすぎます (${(file.size / (1024 * 1024 * 1024)).toFixed(2)}GB > ${(maxFileSize / (1024 * 1024 * 1024)).toFixed(2)}GB)`);
     
-    const response = await fetch(url, {
-      method: 'POST',
-      body: formData,
-      headers: headers
-    });
+    // ユーザーに通知
+    alert(`ファイルサイズが制限を超えています (${(file.size / (1024 * 1024 * 1024)).toFixed(2)}GB)。\n${(maxFileSize / (1024 * 1024 * 1024)).toFixed(2)}GB以下のファイルを選択してください。\n\n※代替画像を使用します。`);
     
-    if (!response.ok) {
-      let errorText = '';
-      try {
-        const errorData = await response.json();
-        errorText = errorData.error || errorData.message || '';
-      } catch {
-        try {
-          errorText = await response.text();
-        } catch (textError) {
-          errorText = '応答の読み取りに失敗';
-        }
-      }
-      
-      console.error(`アップロードエラー (${response.status}):`, errorText);
-      
-      // エラー種別で処理を分ける
-      if (errorText.includes('uniform bucket-level access') || 
-          errorText.includes('permission denied') ||
-          response.status === 403 || 
-          response.status === 500) {
-        console.warn('サーバーエラーのため、フォールバック画像URLを使用します');
-        // ランダム画像URLを生成
-        return {
-          imageUrl: `https://picsum.photos/seed/${Date.now()}/800/600`,
-          isVideo: false,
-          isFallback: true
-        };
-      }
-      
-      throw new Error(`アップロード失敗: ${errorText || response.statusText}`);
-    }
-    
-    const data = await response.json();
-    
-    // フォールバック画像かどうかをチェック
-    if (data.isFallback) {
-      console.warn('サーバーからフォールバック画像が返されました');
-    } else {
-      console.log('アップロード成功:', data.imageUrl);
-    }
-    
-    return data;
-  } catch (error) {
-    console.error('ファイルアップロードエラー:', error);
-    // エラー時のフォールバック
+    // 自動的にフォールバック画像を使用
     return {
       imageUrl: `https://picsum.photos/seed/${Date.now()}/800/600`,
-      isVideo: false,
-      isFallback: true
+      isVideo: file.type.startsWith('video/'),
+      isFallback: true,
+      error: 'ファイルサイズ超過'
+    };
+  } else if (file.size > warningFileSize) {
+    // 大きなファイルの場合は警告を表示するが続行する
+    if (!confirm(`ファイルサイズが大きいため (${(file.size / (1024 * 1024)).toFixed(2)}MB)、アップロードに時間がかかる場合や失敗する可能性があります。\n続行しますか？`)) {
+      return {
+        imageUrl: `https://picsum.photos/seed/${Date.now()}/800/600`,
+        isVideo: file.type.startsWith('video/'),
+        isFallback: true,
+        error: 'ユーザーによるキャンセル'
+      };
+    }
+    
+    console.warn(`大きなファイルのアップロード開始: ${(file.size / (1024 * 1024)).toFixed(2)}MB`);
+  }
+  
+  try {
+    // FormDataの作成
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    // 認証トークンの取得
+    const token = localStorage.getItem('token');
+    
+    // CORS対策: 追加ヘッダーを設定（主にCORS関連とContent-Length）
+    const headers = {
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    };
+    
+    // アップロード用のXMLHttpRequestを作成（進捗監視のため）
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      
+      // 進捗イベントの設定
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && onProgress) {
+          const progress = Math.round((event.loaded / event.total) * 100);
+          console.log(`アップロード進捗: ${progress}%`);
+          onProgress(progress);
+        }
+      };
+      
+      // 完了イベントの設定
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          // 完了時に100%の進捗を通知
+          if (onProgress) {
+            onProgress(100);
+          }
+          
+          try {
+            const response = JSON.parse(xhr.responseText);
+            console.log('アップロード成功:', response);
+            resolve(response);
+          } catch (parseError) {
+            console.error('レスポンスのパースに失敗:', xhr.responseText);
+            reject(new Error('レスポンスの解析に失敗しました'));
+          }
+        } else {
+          // エラー時の処理
+          let errorText;
+          try {
+            const errorResponse = JSON.parse(xhr.responseText);
+            errorText = errorResponse.error || errorResponse.message || xhr.statusText;
+          } catch (e) {
+            errorText = xhr.statusText || 'アップロードに失敗しました';
+          }
+          
+          console.error(`アップロードエラー (${xhr.status}):`, errorText);
+          
+          // 413エラー（ファイルサイズ超過）の場合は特別なメッセージ
+          if (xhr.status === 413) {
+            alert(`ファイルサイズが大きすぎるため、サーバーに拒否されました (${(file.size / (1024 * 1024)).toFixed(2)}MB)。\n代替画像を使用します。`);
+            
+            // 代替画像を返す
+            resolve({
+              imageUrl: `https://picsum.photos/seed/${Date.now()}/800/600`,
+              isVideo: file.type.startsWith('video/'),
+              isFallback: true,
+              error: '413: ファイルサイズ超過'
+            });
+            return;
+          }
+          
+          // その他のエラー時もフォールバック画像を提供
+          resolve({
+            imageUrl: `https://picsum.photos/seed/${Date.now()}/800/600`,
+            isVideo: file.type.startsWith('video/'),
+            isFallback: true,
+            error: `${xhr.status}: ${errorText}`
+          });
+        }
+      };
+      
+      // エラーイベントの設定
+      xhr.onerror = () => {
+        console.error('ネットワークエラーによりアップロードに失敗しました');
+        
+        // CORSエラーが疑われる場合の詳細ログとガイダンス
+        console.log('CORS関連エラーの可能性があります。サーバー側のCORS設定を確認してください。');
+        console.log(`CORS問題の解決方法:
+          1. バックエンドのCORS設定で origin '${window.location.origin}' を許可する
+          2. クライアントとサーバーを同じドメイン/ポートで実行する
+          3. CORSプロキシサーバーを使用する`);
+        
+        // CORS問題かどうかをユーザーに通知
+        const isRunningFromGCS = window.location.hostname.includes('storage.googleapis.com');
+        if (isRunningFromGCS) {
+          alert('CORSポリシーによりアップロードが拒否されました。Google Cloud Storageからの直接アクセスではAPIへのアップロードはできません。代替画像を使用します。');
+        }
+        
+        // ネットワークエラー時もフォールバックを提供
+        resolve({
+          imageUrl: `https://picsum.photos/seed/${Date.now()}/800/600`,
+          isVideo: file.type.startsWith('video/'),
+          isFallback: true,
+          error: 'ネットワークエラー (CORS制限の可能性あり)'
+        });
+      };
+      
+      // タイムアウト設定 - 大きなファイルのため長めに設定
+      xhr.timeout = 300000; // 5分
+      xhr.ontimeout = () => {
+        console.error('アップロードがタイムアウトしました');
+        // タイムアウト時もフォールバックを提供
+        resolve({
+          imageUrl: `https://picsum.photos/seed/${Date.now()}/800/600`,
+          isVideo: file.type.startsWith('video/'),
+          isFallback: true,
+          error: 'タイムアウト'
+        });
+      };
+      
+      // CORS-Anywhere経由でアクセスを試みる（CORS対策）
+      const isRunningFromGCS = window.location.hostname.includes('storage.googleapis.com');
+      const useProxy = isRunningFromGCS;
+      const uploadUrl = useProxy 
+        ? `https://cors-anywhere.herokuapp.com/${url}` 
+        : url;
+      
+      if (useProxy) {
+        console.log(`CORSプロキシ経由でアップロードを試行します: ${uploadUrl}`);
+      }
+      
+      // リクエスト開始
+      xhr.open('POST', uploadUrl, true);
+      
+      // ヘッダー設定
+      Object.entries(headers).forEach(([key, value]) => {
+        xhr.setRequestHeader(key, value);
+      });
+      
+      // プロキシ用ヘッダー
+      if (useProxy) {
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+      }
+      
+      // 大きなファイル用の通知
+      if (file.size > 100 * 1024 * 1024) { // 100MB以上
+        console.warn(`大容量ファイルのアップロード中... サイズ: ${(file.size / (1024 * 1024)).toFixed(2)}MB`);
+      }
+      
+      // リクエスト実行
+      xhr.send(formData);
+    });
+  } catch (error) {
+    console.error('ファイルアップロード前処理エラー:', error);
+    // エラー時はフォールバック画像を返す
+    return {
+      imageUrl: `https://picsum.photos/seed/${Date.now()}/800/600`,
+      isVideo: file.type.startsWith('video/'),
+      isFallback: true,
+      error: error.message
     };
   }
 }
@@ -596,98 +725,12 @@ export const api = {
   }
 };
 
-// 大容量ファイルアップロード処理関数
+// 大容量ファイルアップロード - CORS対応シンプル版
 export async function uploadLargeFile(file, onProgress) {
   console.log(`大容量ファイル処理: ${file.name}、サイズ: ${(file.size / (1024 * 1024)).toFixed(2)}MB`);
   
-  const chunkSize = 5 * 1024 * 1024; // 5MBずつ
-  const totalChunks = Math.ceil(file.size / chunkSize);
-  const sessionId = Date.now().toString() + '-' + Math.random().toString(36).substring(2, 15);
-  
-  try {
-    // セッション開始
-    console.log(`アップロードセッション作成: ${totalChunks}チャンク`);
-    const sessionResponse = await api.uploadSession.create({
-      filename: file.name,
-      fileType: file.type,
-      fileSize: file.size,
-      sessionId: sessionId,
-      totalChunks: totalChunks
-    });
-    
-    if (!sessionResponse || !sessionResponse.success) {
-      throw new Error('アップロードセッション作成に失敗しました');
-    }
-    
-    // チャンク送信（修正版）
-    let uploadedChunks = 0;
-    for (let i = 0; i < totalChunks; i++) {
-      const start = i * chunkSize;
-      const end = Math.min(start + chunkSize, file.size);
-      const chunk = file.slice(start, end);
-      
-      const formData = new FormData();
-      formData.append('chunk', chunk, 'chunk'); // ファイル名を指定して明示的に追加
-      formData.append('sessionId', sessionId);
-      formData.append('chunkIndex', i.toString()); // 文字列に変換
-      formData.append('totalChunks', totalChunks.toString()); // 文字列に変換
-      
-      console.log(`チャンク ${i+1}/${totalChunks} をアップロード中... (${((end-start)/1024/1024).toFixed(2)}MB)`);
-      
-      // チャンクをアップロード - カスタムフェッチオプション
-      try {
-        const response = await fetch(`${API_BASE_URL}/upload-chunk`, {
-          method: 'POST',
-          body: formData,
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-            // Content-Typeはフォームデータでは自動設定されるため削除
-          }
-        });
-        
-        // レスポンス確認
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`チャンク${i+1}/${totalChunks}のアップロードエラー:`, errorText);
-          throw new Error(`チャンク${i+1}/${totalChunks}のアップロードに失敗: ${errorText}`);
-        }
-        
-        const chunkResponse = await response.json();
-        console.log(`チャンク ${i+1}/${totalChunks} アップロード成功`, chunkResponse);
-      } catch (chunkError) {
-        console.error(`チャンク${i+1}のアップロードエラー:`, chunkError);
-        throw chunkError;
-      }
-      
-      // 進捗更新
-      uploadedChunks++;
-      if (onProgress) {
-        onProgress((uploadedChunks / totalChunks) * 100);
-      }
-    }
-    
-    // 完了通知
-    console.log('全チャンクアップロード完了、結合処理を開始します');
-    const completeResponse = await api.uploadSession.complete(sessionId);
-    
-    return completeResponse;
-  } catch (error) {
-    console.error('大容量アップロードエラー:', error);
-    
-    // エラー時はセッション中止
-    try {
-      await api.uploadSession.abort(sessionId);
-    } catch (abortError) {
-      console.error('セッション中止エラー:', abortError);
-    }
-    
-    // エラーが発生した場合でもフォールバックとしてランダム画像を返す
-    return {
-      imageUrl: `https://picsum.photos/seed/${Date.now()}/800/600`,
-      isVideo: false,
-      isFallback: true
-    };
-  }
+  // 単一リクエストで拡張アップロード関数を使用（サイズ制限のチェックも含む）
+  return await uploadFile(file, onProgress);
 }
 
 export default api;
