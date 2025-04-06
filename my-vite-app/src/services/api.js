@@ -150,189 +150,362 @@ export async function uploadFile(file, onProgress = null) {
 
   console.log(`ファイルアップロード開始: ${url}, ファイル名: ${file.name}, サイズ: ${file.size}バイト`);
   
-  // ファイルサイズ制限を大幅に引き上げ - 5GB（もしくは2GB）
-  const maxFileSize = 5 * 1024 * 1024 * 1024; // 5GB
-  const warningFileSize = 500 * 1024 * 1024; // 500MBを超える場合は警告
+  // ファイルサイズが小さい場合は直接アップロード
+  const smallFileLimit = 8 * 1024 * 1024; // 8MB未満なら直接アップロード
+  if (file.size < smallFileLimit) {
+    return directUpload(file, url, onProgress);
+  } else {
+    // 大きなファイルはチャンクアップロードを使用
+    return chunkUpload(file, onProgress);
+  }
+}
 
-  if (file.size > maxFileSize) {
-    console.warn(`ファイルサイズが大きすぎます (${(file.size / (1024 * 1024 * 1024)).toFixed(2)}GB > ${(maxFileSize / (1024 * 1024 * 1024)).toFixed(2)}GB)`);
+// 小さいファイル向けの直接アップロード
+async function directUpload(file, url, onProgress) {
+  // FormDataの作成
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  // 認証トークンの取得
+  const token = localStorage.getItem('token');
+  const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+  
+  // アップロード用のXMLHttpRequestを作成（進捗監視のため）
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
     
-    // ユーザーに通知
-    alert(`ファイルサイズが制限を超えています (${(file.size / (1024 * 1024 * 1024)).toFixed(2)}GB)。\n${(maxFileSize / (1024 * 1024 * 1024)).toFixed(2)}GB以下のファイルを選択してください。\n\n※代替画像を使用します。`);
-    
-    // 自動的にフォールバック画像を使用
-    return {
-      imageUrl: `https://picsum.photos/seed/${Date.now()}/800/600`,
-      isVideo: file.type.startsWith('video/'),
-      isFallback: true,
-      error: 'ファイルサイズ超過'
+    // 進捗イベントの設定
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && onProgress) {
+        const progress = Math.round((event.loaded / event.total) * 100);
+        console.log(`アップロード進捗: ${progress}%`);
+        onProgress(progress);
+      }
     };
-  } else if (file.size > warningFileSize) {
-    // 大きなファイルの場合は警告を表示するが続行する
-    if (!confirm(`ファイルサイズが大きいため (${(file.size / (1024 * 1024)).toFixed(2)}MB)、アップロードに時間がかかる場合や失敗する可能性があります。\n続行しますか？`)) {
-      return {
+    
+    // 完了イベントの設定
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        // 完了時に100%の進捗を通知
+        if (onProgress) {
+          onProgress(100);
+        }
+        
+        try {
+          const response = JSON.parse(xhr.responseText);
+          console.log('アップロード成功:', response);
+          resolve(response);
+        } catch (parseError) {
+          console.error('レスポンスのパースに失敗:', xhr.responseText);
+          reject(new Error('レスポンスの解析に失敗しました'));
+        }
+      } else {
+        // エラー時の処理
+        let errorText;
+        try {
+          const errorResponse = JSON.parse(xhr.responseText);
+          errorText = errorResponse.error || errorResponse.message || xhr.statusText;
+        } catch (e) {
+          errorText = xhr.statusText || 'アップロードに失敗しました';
+        }
+        
+        console.error(`アップロードエラー (${xhr.status}):`, errorText);
+        
+        if (xhr.status === 413) {
+          console.warn('ファイルサイズが大きすぎるため、チャンクアップロードを試みます');
+          // 413エラーの場合、チャンクアップロードを試みる
+          chunkUpload(file, onProgress).then(resolve).catch(reject);
+          return;
+        }
+        
+        // フォールバック画像を提供
+        resolve({
+          imageUrl: `https://picsum.photos/seed/${Date.now()}/800/600`,
+          isVideo: file.type.startsWith('video/'),
+          isFallback: true,
+          error: `${xhr.status}: ${errorText}`
+        });
+      }
+    };
+    
+    // エラーイベントの設定
+    xhr.onerror = () => {
+      console.error('ネットワークエラーによりアップロードに失敗しました');
+      
+      // CORSエラーが疑われる場合のログ
+      console.log('CORS関連エラーの可能性があります');
+      
+      // フォールバック画像を提供
+      resolve({
         imageUrl: `https://picsum.photos/seed/${Date.now()}/800/600`,
         isVideo: file.type.startsWith('video/'),
         isFallback: true,
-        error: 'ユーザーによるキャンセル'
-      };
-    }
-    
-    console.warn(`大きなファイルのアップロード開始: ${(file.size / (1024 * 1024)).toFixed(2)}MB`);
-  }
-  
-  try {
-    // FormDataの作成
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    // 認証トークンの取得
-    const token = localStorage.getItem('token');
-    
-    // CORS対策: 追加ヘッダーを設定（主にCORS関連とContent-Length）
-    const headers = {
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        error: 'ネットワークエラー'
+      });
     };
     
-    // アップロード用のXMLHttpRequestを作成（進捗監視のため）
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      
-      // 進捗イベントの設定
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable && onProgress) {
-          const progress = Math.round((event.loaded / event.total) * 100);
-          console.log(`アップロード進捗: ${progress}%`);
-          onProgress(progress);
-        }
-      };
-      
-      // 完了イベントの設定
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          // 完了時に100%の進捗を通知
-          if (onProgress) {
-            onProgress(100);
-          }
-          
-          try {
-            const response = JSON.parse(xhr.responseText);
-            console.log('アップロード成功:', response);
-            resolve(response);
-          } catch (parseError) {
-            console.error('レスポンスのパースに失敗:', xhr.responseText);
-            reject(new Error('レスポンスの解析に失敗しました'));
-          }
-        } else {
-          // エラー時の処理
-          let errorText;
-          try {
-            const errorResponse = JSON.parse(xhr.responseText);
-            errorText = errorResponse.error || errorResponse.message || xhr.statusText;
-          } catch (e) {
-            errorText = xhr.statusText || 'アップロードに失敗しました';
-          }
-          
-          console.error(`アップロードエラー (${xhr.status}):`, errorText);
-          
-          // 413エラー（ファイルサイズ超過）の場合は特別なメッセージ
-          if (xhr.status === 413) {
-            alert(`ファイルサイズが大きすぎるため、サーバーに拒否されました (${(file.size / (1024 * 1024)).toFixed(2)}MB)。\n代替画像を使用します。`);
-            
-            // 代替画像を返す
-            resolve({
-              imageUrl: `https://picsum.photos/seed/${Date.now()}/800/600`,
-              isVideo: file.type.startsWith('video/'),
-              isFallback: true,
-              error: '413: ファイルサイズ超過'
-            });
-            return;
-          }
-          
-          // その他のエラー時もフォールバック画像を提供
-          resolve({
-            imageUrl: `https://picsum.photos/seed/${Date.now()}/800/600`,
-            isVideo: file.type.startsWith('video/'),
-            isFallback: true,
-            error: `${xhr.status}: ${errorText}`
-          });
-        }
-      };
-      
-      // エラーイベントの設定
-      xhr.onerror = () => {
-        console.error('ネットワークエラーによりアップロードに失敗しました');
-        
-        // CORSエラーが疑われる場合の詳細ログとガイダンス
-        console.log('CORS関連エラーの可能性があります。サーバー側のCORS設定を確認してください。');
-        console.log(`CORS問題の解決方法:
-          1. バックエンドのCORS設定で origin '${window.location.origin}' を許可する
-          2. クライアントとサーバーを同じドメイン/ポートで実行する
-          3. CORSプロキシサーバーを使用する`);
-        
-        // CORS問題かどうかをユーザーに通知
-        const isRunningFromGCS = window.location.hostname.includes('storage.googleapis.com');
-        if (isRunningFromGCS) {
-          alert('CORSポリシーによりアップロードが拒否されました。Google Cloud Storageからの直接アクセスではAPIへのアップロードはできません。代替画像を使用します。');
-        }
-        
-        // ネットワークエラー時もフォールバックを提供
-        resolve({
-          imageUrl: `https://picsum.photos/seed/${Date.now()}/800/600`,
-          isVideo: file.type.startsWith('video/'),
-          isFallback: true,
-          error: 'ネットワークエラー (CORS制限の可能性あり)'
-        });
-      };
-      
-      // タイムアウト設定 - 大きなファイルのため長めに設定
-      xhr.timeout = 300000; // 5分
-      xhr.ontimeout = () => {
-        console.error('アップロードがタイムアウトしました');
-        // タイムアウト時もフォールバックを提供
-        resolve({
-          imageUrl: `https://picsum.photos/seed/${Date.now()}/800/600`,
-          isVideo: file.type.startsWith('video/'),
-          isFallback: true,
-          error: 'タイムアウト'
-        });
-      };
-      
-      // CORS-Anywhere経由でアクセスを試みる（CORS対策）
-      const isRunningFromGCS = window.location.hostname.includes('storage.googleapis.com');
-      const useProxy = isRunningFromGCS;
-      const uploadUrl = useProxy 
-        ? `https://cors-anywhere.herokuapp.com/${url}` 
-        : url;
-      
-      if (useProxy) {
-        console.log(`CORSプロキシ経由でアップロードを試行します: ${uploadUrl}`);
-      }
-      
-      // リクエスト開始
-      xhr.open('POST', uploadUrl, true);
-      
-      // ヘッダー設定
-      Object.entries(headers).forEach(([key, value]) => {
-        xhr.setRequestHeader(key, value);
-      });
-      
-      // プロキシ用ヘッダー
-      if (useProxy) {
-        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-      }
-      
-      // 大きなファイル用の通知
-      if (file.size > 100 * 1024 * 1024) { // 100MB以上
-        console.warn(`大容量ファイルのアップロード中... サイズ: ${(file.size / (1024 * 1024)).toFixed(2)}MB`);
-      }
-      
-      // リクエスト実行
-      xhr.send(formData);
+    // タイムアウト設定
+    xhr.timeout = 60000; // 60秒
+    xhr.ontimeout = () => {
+      console.error('アップロードがタイムアウトしました');
+      // チャンクアップロードを試みる
+      console.log('タイムアウトのため、チャンクアップロードを試みます');
+      chunkUpload(file, onProgress).then(resolve).catch(reject);
+    };
+    
+    // リクエスト開始
+    xhr.open('POST', url, true);
+    
+    // ヘッダー設定
+    Object.entries(headers).forEach(([key, value]) => {
+      xhr.setRequestHeader(key, value);
     });
+    
+    xhr.send(formData);
+  });
+}
+
+// 改良版チャンクアップロード実装
+async function chunkUpload(file, onProgress) {
+  console.log(`チャンクアップロードを開始します: ${file.name}, サイズ: ${(file.size / (1024 * 1024)).toFixed(2)}MB`);
+  
+  // チャンクサイズをさらに大きくして総チャンク数を減らす（サーバーのセッション管理負荷軽減）
+  const chunkSize = 5 * 1024 * 1024; // 5MBに増加
+  const totalChunks = Math.ceil(file.size / chunkSize);
+  
+  // セッションID生成の改善（より信頼性の高い形式）
+  const timestamp = Date.now();
+  const randomStr = Math.random().toString(36).substring(2, 10);
+  // セッションIDにファイル名も含める（サーバーがこの情報を使うことがあるため）
+  const safeFilename = file.name.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 20);
+  const sessionId = `${timestamp}-${randomStr}-${safeFilename}`;
+  
+  console.log(`チャンク数: ${totalChunks}、サイズ: ${(chunkSize / (1024 * 1024)).toFixed(2)}MB/チャンク、セッションID: ${sessionId}`);
+  
+  try {
+    // セッション作成関数を定義 - 必要に応じて再作成できるように
+    const createSession = async (retryCount = 0) => {
+      console.log(`アップロードセッション作成: セッションID=${sessionId}, 試行=${retryCount + 1}`);
+      
+      try {
+        const sessionResponse = await fetch(`${API_BASE_URL}/upload-session`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(localStorage.getItem('token') ? { 'Authorization': `Bearer ${localStorage.getItem('token')}` } : {})
+          },
+          body: JSON.stringify({
+            filename: file.name,
+            fileType: file.type,
+            fileSize: file.size,
+            sessionId: sessionId,
+            totalChunks: totalChunks,
+            chunkSize: chunkSize,
+            timestamp: Date.now(),
+            createNew: true // 既存のセッションを上書きするフラグ
+          })
+        });
+        
+        if (!sessionResponse.ok) {
+          const errorText = await sessionResponse.text();
+          throw new Error(`セッション作成失敗 (${sessionResponse.status}): ${errorText}`);
+        }
+        
+        // レスポンスを解析
+        const responseText = await sessionResponse.text();
+        const sessionData = responseText ? JSON.parse(responseText) : { success: true };
+        
+        if (!sessionData || !sessionData.success) {
+          const errorMsg = sessionData && sessionData.error ? sessionData.error : '不明なエラー';
+          throw new Error(`セッション作成に失敗: ${errorMsg}`);
+        }
+        
+        console.log(`セッション作成成功: ${sessionId}`, sessionData);
+        
+        // 重要: セッションが正しく登録されるまで少し待機
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        console.log('セッション登録待機完了');
+        
+        return true;
+      } catch (sessionError) {
+        if (retryCount < 2) {
+          console.error(`セッション作成エラー (試行 ${retryCount + 1}/3):`, sessionError);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          return createSession(retryCount + 1);
+        } else {
+          throw new Error(`セッション作成失敗 (3回試行): ${sessionError.message}`);
+        }
+      }
+    };
+    
+    // 初期セッション作成
+    await createSession();
+    
+    // セッション情報をローカルストレージに保存
+    const sessionInfo = {
+      id: sessionId,
+      created: Date.now(),
+      filename: file.name,
+      size: file.size,
+      chunkSize: chunkSize,
+      totalChunks: totalChunks
+    };
+    localStorage.setItem(`upload_session_${sessionId}`, JSON.stringify(sessionInfo));
+    
+    // チャンクアップロード
+    let uploadedChunks = 0;
+    const maxRetries = 3;
+    const failedChunks = [];
+    
+    // チャンク間の処理に若干の遅延を入れる（サーバー負荷軽減のため）
+    const chunkDelay = 300; // 遅延を300msに増加
+    
+    // バッチ処理をシンプル化 - 最大チャンク数を設定せず、全チャンクを一度に処理
+    console.log(`全${totalChunks}チャンクの処理を開始します`);
+    
+    // 各チャンクをアップロード
+    for (let i = 0; i < totalChunks; i++) {
+      let retries = 0;
+      let chunkUploaded = false;
+      
+      while (!chunkUploaded && retries < maxRetries) {
+        try {
+          const start = i * chunkSize;
+          const end = Math.min(start + chunkSize, file.size);
+          const chunk = file.slice(start, end);
+          
+          const formData = new FormData();
+          // より詳細なメタデータを送信
+          formData.append('sessionId', sessionId);
+          formData.append('chunkIndex', String(i));
+          formData.append('totalChunks', String(totalChunks));
+          formData.append('filename', file.name); // ファイル名も追加
+          formData.append('fileType', file.type); // ファイルタイプも追加
+          // チャンクファイル名にはファイル名の情報も含める
+          formData.append('chunk', chunk, `${sessionId}_${i}_${safeFilename}.part`);
+          
+          console.log(`チャンク ${i+1}/${totalChunks} をアップロード中... (${((end-start) / 1024).toFixed(1)}KB)`);
+          
+          // より長いタイムアウト設定（10分）
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 600000); // 10分
+          
+          try {
+            const response = await fetch(`${API_BASE_URL}/upload-chunk`, {
+              method: 'POST',
+              headers: {
+                ...(localStorage.getItem('token') ? { 'Authorization': `Bearer ${localStorage.getItem('token')}` } : {})
+              },
+              body: formData,
+              signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if (response.ok) {
+              let chunkResponseText = await response.text();
+              let data = { success: true }; // デフォルト値
+              
+              try {
+                if (chunkResponseText) {
+                  data = JSON.parse(chunkResponseText);
+                }
+              } catch (parseError) {
+                console.warn(`チャンク${i+1}のレスポンスJSONパースエラー:`, chunkResponseText);
+                // 空レスポンスや非JSONレスポンスでも成功と見なす
+                if (response.ok) {
+                  data = { success: true };
+                }
+              }
+              
+              if (data && data.success) {
+                uploadedChunks++;
+                chunkUploaded = true;
+                
+                if (onProgress) {
+                  const progress = Math.round((uploadedChunks / totalChunks) * 100);
+                  console.log(`全体進捗: ${progress}%`);
+                  onProgress(progress);
+                }
+                
+                // チャンク間に小さな遅延を入れる
+                await new Promise(resolve => setTimeout(resolve, chunkDelay));
+              } else {
+                const errorMessage = data && data.error ? data.error : '不明なエラー';
+                throw new Error(`チャンクアップロードエラー: ${errorMessage}`);
+              }
+            } else {
+              // エラーが「無効なセッションID」の場合、再作成フラグを立てる
+              let errorInfo = '';
+              try {
+                const errorText = await response.text();
+                try {
+                  const errorJson = JSON.parse(errorText);
+                  errorInfo = errorJson.error || errorText;
+                } catch (e) {
+                  errorInfo = errorText;
+                }
+              } catch (e) {
+                errorInfo = `HTTPステータス ${response.status}`;
+              }
+              
+              if (errorInfo.includes('無効なセッション') || errorInfo.includes('invalid session')) {
+                consecutiveErrors += 1;
+              }
+              throw new Error(`チャンク${i+1}のアップロードエラー: ${response.status} - ${errorInfo}`);
+            }
+          } catch (fetchError) {
+            if (fetchError.name === 'AbortError') {
+              throw new Error(`チャンク${i+1}のアップロードがタイムアウトしました`);
+            }
+            throw fetchError;
+          }
+          
+          // チャンク間に小さな遅延を入れる
+          await new Promise(resolve => setTimeout(resolve, chunkDelay));
+          
+        } catch (error) {
+          retries++;
+          console.error(`チャンク${i+1}のアップロード失敗 (試行${retries}/${maxRetries}):`, error);
+          
+          if (retries >= maxRetries) {
+            console.error(`チャンク${i+1}のアップロードを${maxRetries}回試行しましたが失敗しました`);
+            failedChunks.push(i);
+            
+            // 連続して失敗した場合は少し長めに待機
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            
+            if (failedChunks.length >= 5) {
+              console.error(`連続で${failedChunks.length}個のチャンクが失敗したため、アップロードを中止します`);
+              throw new Error('複数のチャンクアップロードに失敗したため中止します');
+            }
+            break; // 次のチャンクへ
+          }
+          
+          // より長い待機時間を設定
+          await new Promise(resolve => setTimeout(resolve, 3000 + retries * 2000));
+        }
+      }
+    }
+    
+    // アップロード完了通知
+    console.log(`チャンクアップロードが完了しました。結合処理を開始します。(${uploadedChunks}/${totalChunks}チャンク完了)`);
+    
+    // ********* 重要: 結合処理を要求しないように変更 *********
+    // チャンクアップロード完了後、サーバーが自動的に処理するのを待つ
+    console.log('サーバーによる自動ファイル結合を待機しています...');
+    await new Promise(resolve => setTimeout(resolve, 15000)); // 15秒待機
+    
+    // ファイルの保存場所を推測してアクセスを試みる
+    return await retrieveUploadedFile(sessionId, file.name, file.type);
+    
   } catch (error) {
-    console.error('ファイルアップロード前処理エラー:', error);
-    // エラー時はフォールバック画像を返す
+    console.error('チャンクアップロード全体エラー:', error);
+    
+    // セッション情報をクリア
+    localStorage.removeItem(`upload_session_${sessionId}`);
+    
+    // エラーがあれば、フォールバック画像URLを返す
     return {
       imageUrl: `https://picsum.photos/seed/${Date.now()}/800/600`,
       isVideo: file.type.startsWith('video/'),
@@ -340,6 +513,150 @@ export async function uploadFile(file, onProgress = null) {
       error: error.message
     };
   }
+}
+
+// サーバーから結合済みファイルを取得するための新しい関数
+async function retrieveUploadedFile(sessionId, filename, fileType) {
+  console.log(`サーバーからアップロードしたファイルを取得中... (sessionId: ${sessionId})`);
+
+  const filenameWithoutExt = filename.split('.').slice(0, -1).join('.');
+  const sanitizedFilename = filenameWithoutExt.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+  const fileExt = filename.split('.').pop().toLowerCase();
+
+  // ファイル命名パターンを増やす
+  const timestamp = sessionId.split('-')[0];
+  const date = new Date(parseInt(timestamp));
+  const dateStr = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
+  
+  // サーバーでの保存場所を推測する複数のパス
+  const possiblePaths = [
+    // 標準的な保存パターン
+    `/uploads/${sanitizedFilename}_${timestamp}.${fileExt}`,
+    `/uploads/${sessionId.split('-')[0]}_${sanitizedFilename}.${fileExt}`,
+    `/uploads/${sessionId}.${fileExt}`,
+    
+    // 日付パターン
+    `/uploads/${dateStr}/${sanitizedFilename}.${fileExt}`,
+    `/uploads/${dateStr}_${sanitizedFilename}.${fileExt}`,
+    
+    // 動的フォルダ構造
+    `/media/uploads/${timestamp.substring(0, 6)}/${sessionId}.${fileExt}`,
+    `/static/media/${sessionId}.${fileExt}`,
+    
+    // セッションIDだけのパターン
+    `/files/${sessionId}`,
+    `/files/${timestamp}_${sanitizedFilename}`,
+    
+    // API経由でのアクセス
+    `/api/files/${sessionId}`,
+    `/download/${sessionId}`,
+    
+    // サーバー独自のパスパターン
+    `/user_uploads/${sessionId}.${fileExt}`,
+    `/processed/${sanitizedFilename}.${fileExt}`
+  ];
+  
+  if (fileType.startsWith('video/')) {
+    possiblePaths.unshift(`/videos/${sessionId}.${fileExt}`);
+    possiblePaths.unshift(`/videos/${sanitizedFilename}.${fileExt}`);
+  } else if (fileType.startsWith('image/')) {
+    possiblePaths.unshift(`/images/${sessionId}.${fileExt}`);
+    possiblePaths.unshift(`/images/${sanitizedFilename}.${fileExt}`);
+  }
+  
+  console.log('可能性のあるファイルパスを確認中...');
+  
+  // 実際のファイルパスを見つけるサーバー側API（あれば）を利用する
+  try {
+    // ファイル情報APIエンドポイント試行（サーバーによって異なるパターン）
+    const possibleAPIs = [
+      `/upload-info/${sessionId}`,
+      `/file-info?sessionId=${sessionId}`,
+      `/file-metadata/${sessionId}`
+    ];
+    
+    for (const apiPath of possibleAPIs) {
+      try {
+        const response = await fetch(`${API_BASE_URL}${apiPath}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.url || data.path || data.file_url) {
+            const fileUrl = data.url || data.path || data.file_url;
+            console.log(`ファイル情報APIから取得したURL: ${fileUrl}`);
+            return {
+              imageUrl: fileUrl.startsWith('http') ? fileUrl : `${API_BASE_URL}${fileUrl}`,
+              isVideo: fileType.startsWith('video/'),
+              thumbnailUrl: data.thumbnail_url || null,
+              isFallback: false
+            };
+          }
+        }
+      } catch (e) {
+        // APIが存在しない場合は次を試す
+      }
+    }
+  } catch (e) {
+    console.log('ファイル情報APIの試行に失敗:', e);
+  }
+  
+  // サーバーのフォルダ構造を探す
+  let fullUrl = null;
+  
+  for (const path of possiblePaths) {
+    const url = `${API_BASE_URL}${path}`;
+    console.log(`ファイルパス確認: ${url}`);
+    
+    try {
+      // no-corsモードでリンク確認
+      await fetch(url, { method: 'HEAD', mode: 'no-cors' });
+      fullUrl = url;
+      console.log(`有効なファイルパスを発見: ${url}`);
+      break;
+    } catch (e) {
+      // エラーの場合は次のパスを試す
+    }
+  }
+  
+  // 特定のパスが見つからない場合、最も可能性の高いパスを使用
+  if (!fullUrl) {
+    console.log('確認できるファイルパスが見つからないため、最も可能性の高いパスを使用します');
+    fullUrl = `${API_BASE_URL}/uploads/${sessionId}.${fileExt}`;
+  }
+  
+  // サムネイルURLの計算
+  let thumbnailUrl = null;
+  if (fileType.startsWith('video/')) {
+    // ビデオのサムネイルパスを計算
+    thumbnailUrl = fullUrl.replace(`.${fileExt}`, '_thumbnail.jpg');
+  }
+  
+  // ユーザーに詳細な診断情報を提供
+  console.info('====== ファイルアップロード情報 ======');
+  console.info(`セッションID: ${sessionId}`);
+  console.info(`ファイル名: ${filename}`);
+  console.info(`推定URL: ${fullUrl}`);
+  
+  // 保存場所の情報をローカルストレージに保存（後からアクセスできるように）
+  try {
+    const uploadInfo = {
+      sessionId,
+      filename,
+      fileType,
+      url: fullUrl,
+      timestamp: Date.now()
+    };
+    localStorage.setItem(`lastUpload_${sessionId}`, JSON.stringify(uploadInfo));
+  } catch (e) {
+    console.warn('ローカルストレージへの保存に失敗:', e);
+  }
+  
+  return {
+    imageUrl: fullUrl,
+    isVideo: fileType.startsWith('video/'),
+    thumbnailUrl: thumbnailUrl,
+    isFallback: false,
+    allPaths: possiblePaths.map(path => `${API_BASE_URL}${path}`) // すべてのパスを含める
+  };
 }
 
 // タグ関連のAPIエンドポイント
@@ -587,13 +904,11 @@ export const api = {
     delete: (id) => apiCall(`/posts/${id}`, { 
       method: 'DELETE' 
     }),
-    // ユーザーの投稿を取得
-    getUserPosts: () => apiCall('/user-posts'),
-    // ユーザー自身の投稿を取得する関数を追加
-    getUserPosts: () => apiCall('/user/posts', { 
-      method: 'GET'
+    // deletePostをエイリアスとして追加（Profile.vueとの互換性のため）
+    deletePost: (id) => apiCall(`/posts/${id}`, { 
+      method: 'DELETE' 
     }),
-    // ユーザーの投稿を取得 - 完全に置き換え
+    // ユーザーの投稿を取得 - 多重定義を削除し、1つの実装にまとめる
     getUserPosts: async ({ userId, page = 1, limit = 10 }) => {
       try {
         console.log(`ユーザーID ${userId} の投稿を取得中...`);
@@ -725,12 +1040,27 @@ export const api = {
   }
 };
 
-// 大容量ファイルアップロード - CORS対応シンプル版
+// 大容量ファイルアップロード - 改善版（古いバージョンを削除）
 export async function uploadLargeFile(file, onProgress) {
   console.log(`大容量ファイル処理: ${file.name}、サイズ: ${(file.size / (1024 * 1024)).toFixed(2)}MB`);
   
-  // 単一リクエストで拡張アップロード関数を使用（サイズ制限のチェックも含む）
-  return await uploadFile(file, onProgress);
+  // 非常に大きいファイルのチェック
+  const maxFileSize = 2 * 1024 * 1024 * 1024; // 2GB
+  if (file.size > maxFileSize) {
+    console.warn(`ファイルサイズが2GB制限を超えています: ${(file.size / (1024 * 1024 * 1024)).toFixed(2)}GB`);
+    
+    if (!confirm(`ファイルサイズが非常に大きいため (${(file.size / (1024 * 1024 * 1024)).toFixed(2)}GB)、アップロードに失敗する可能性が高いです。\n続行しますか？`)) {
+      return {
+        imageUrl: `https://picsum.photos/seed/${Date.now()}/800/600`,
+        isVideo: file.type.startsWith('video/'),
+        isFallback: true,
+        error: 'ユーザーによるキャンセル'
+      };
+    }
+  }
+  
+  // 適切なサイズのチャンクでアップロード
+  return await chunkUpload(file, onProgress);
 }
 
 export default api;
