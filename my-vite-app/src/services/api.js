@@ -400,7 +400,24 @@ export const api = {
     // ユーザー自身の投稿を取得する関数を追加
     getUserPosts: () => apiCall('/user/posts', { 
       method: 'GET'
-    })
+    }),
+    // ユーザーの投稿を取得
+    getUserPosts: async ({ userId, page = 1, limit = 10 }) => {
+      try {
+        console.log(`ユーザーID ${userId} の投稿を取得中...`);
+        const response = await apiCall(`/user/${userId}/posts?page=${page}&limit=${limit}`);
+        return response || { posts: [] };
+      } catch (err) {
+        console.error('ユーザー投稿取得エラー:', err);
+        return { posts: [] }; // エラー時は空配列を返す
+      }
+    },
+    
+    // 投稿を削除
+    deletePost: async (postId) => {
+      console.log(`投稿ID ${postId} を削除中...`);
+      return await apiCall(`/posts/${postId}`, { method: 'DELETE' });
+    }
   },
   
   // いいね関連

@@ -1508,6 +1508,76 @@ app.put('/user/profile', authenticateToken, async (req, res) => {
   }
 });
 
+// ユーザーの投稿を取得する API エンドポイント
+app.get('/user/:userId/posts', async (req, res) => {
+  try {
+    const userId = parseInt(req.params.userId);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    
+    console.log(`ユーザーID ${userId} の投稿をページ ${page}、リミット ${limit} で取得中`);
+    
+    const data = await readData();
+    
+    // ユーザーの投稿をフィルタリング
+    const userPosts = data.posts
+      .filter(post => post.user_id === userId)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); // 降順にソート
+    
+    // ページネーション
+    const startIndex = (page - 1) * limit;
+    const paginatedPosts = userPosts.slice(startIndex, startIndex + limit);
+    
+    console.log(`${userPosts.length}件中${paginatedPosts.length}件の投稿を取得`);
+    
+    res.json({ 
+      posts: paginatedPosts,
+      totalPosts: userPosts.length,
+      page: page,
+      limit: limit
+    });
+  } catch (err) {
+    console.error('ユーザー投稿取得エラー:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+// 投稿を削除する API エンドポイント
+app.delete('/posts/:postId', authenticateToken, async (req, res) => {
+  try {
+    const postId = parseInt(req.params.postId);
+    const userId = req.user.id;
+    
+    console.log(`ユーザーID ${userId} が投稿ID ${postId} を削除しようとしています`);
+    
+    const data = await readData();
+    
+    // 投稿を見つける
+    const postIndex = data.posts.findIndex(post => post.id === postId);
+    
+    if (postIndex === -1) {
+      console.log(`投稿ID ${postId} が見つかりません`);
+      return res.status(404).json({ error: '投稿が見つかりません' });
+    }
+    
+    // 投稿の所有者かどうか確認
+    if (data.posts[postIndex].user_id !== userId) {
+      console.log(`権限エラー: ユーザーID ${userId} は投稿ID ${postId} の所有者ではありません`);
+      return res.status(403).json({ error: '他のユーザーの投稿は削除できません' });
+    }
+    
+    // 投稿を削除
+    const deletedPost = data.posts.splice(postIndex, 1)[0];
+    await writeData(data);
+    
+    console.log(`投稿ID ${postId} を削除しました`);
+    res.json({ message: '投稿が削除されました', post: deletedPost });
+  } catch (err) {
+    console.error('投稿削除エラー:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
 // サーバー起動時にデータ構造を確認
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, async () => {
