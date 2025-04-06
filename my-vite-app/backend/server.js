@@ -1229,22 +1229,22 @@ if (!fsSync.existsSync(tempUploadsDir)) {  // fsSync を使用
 const uploadSessions = {};
 
 // アップロードセッション開始エンドポイント
-app.post('/upload-session', authenticateToken, (req, res) => {
-  const { filename, fileType, fileSize, sessionId, totalChunks } = req.body;
-  
-  if (!filename || !fileType || !fileSize || !sessionId || !totalChunks) {
-    return res.status(400).json({ error: '不正なリクエストパラメータ' });
-  }
-  
-  console.log(`アップロードセッション開始: ${sessionId}, ファイル: ${filename}, サイズ: ${fileSize}バイト`);
-  
-  // ユーザー固有のセッションディレクトリを作成
-  const userId = req.user.id;
-  const sessionDir = path.join(tempUploadsDir, `${userId}_${sessionId}`);
-  
+app.post('/upload-session', authenticateToken, async (req, res) => {
   try {
-    if (!fsSync.existsSync(sessionDir)) {  // fsSync を使用
-      fsSync.mkdirSync(sessionDir, { recursive: true });  // fsSync を使用
+    const { filename, fileType, fileSize, sessionId, totalChunks } = req.body;
+    
+    if (!filename || !fileType || !fileSize || !sessionId || !totalChunks) {
+      return res.status(400).json({ error: '不正なリクエストパラメータ' });
+    }
+    
+    console.log(`アップロードセッション開始 (ユーザーID: ${req.user.id}): ${sessionId}, ファイル: ${filename}, サイズ: ${fileSize}バイト`);
+    
+    // ユーザー固有のセッションディレクトリを作成
+    const userId = req.user.id;
+    const sessionDir = path.join(tempUploadsDir, `${userId}_${sessionId}`);
+    
+    if (!fsSync.existsSync(sessionDir)) {
+      fsSync.mkdirSync(sessionDir, { recursive: true });
     }
     
     // セッション情報を保存
@@ -1252,53 +1252,74 @@ app.post('/upload-session', authenticateToken, (req, res) => {
       userId,
       filename,
       fileType,
-      fileSize,
-      totalChunks,
+      fileSize: parseInt(fileSize),
+      totalChunks: parseInt(totalChunks),
       receivedChunks: 0,
       chunkStatus: Array(parseInt(totalChunks)).fill(false),
       sessionDir,
       createdAt: new Date()
     };
     
+    console.log(`セッション ${sessionId} 作成完了、${totalChunks}チャンク待機中`);
     res.json({ success: true, message: 'アップロードセッションが作成されました' });
   } catch (error) {
     console.error('アップロードセッション作成エラー:', error);
-    res.status(500).json({ error: 'セッション作成に失敗しました' });
+    res.status(500).json({ error: 'セッション作成に失敗しました: ' + error.message });
   }
 });
 
-// チャンクアップロードエンドポイント
-const chunkUpload = multer({
-  storage: multer.diskStorage({
-    destination: (req, file, cb) => {
-      const { sessionId } = req.body;
-      const session = uploadSessions[sessionId];
-      
-      if (!session) {
-        return cb(new Error('セッションが見つかりません'));
+// チャンクアップロードエンドポイント - 修正版
+app.post('/upload-chunk', authenticateToken, async (req, res) => {
+  // まずmulterミドルウェアをセットアップ
+  const uploadMiddleware = multer({
+    storage: multer.diskStorage({
+      destination: (req, file, cb) => {
+        const sessionId = req.body.sessionId;
+        
+        // セッションIDの検証を追加
+        if (!sessionId || !uploadSessions[sessionId]) {
+          console.error(`セッションIDが無効: ${sessionId}`);
+          return cb(new Error('無効なセッションID'));
+        }
+        
+        const session = uploadSessions[sessionId];
+        cb(null, session.sessionDir);
+      },
+      filename: (req, file, cb) => {
+        const chunkIndex = req.body.chunkIndex;
+        cb(null, `chunk_${chunkIndex}`);
       }
-      
-      cb(null, session.sessionDir);
-    },
-    filename: (req, file, cb) => {
-      const { chunkIndex } = req.body;
-      cb(null, `chunk_${chunkIndex}`);
-    }
-  }),
-  limits: { fileSize: 10 * 1024 * 1024 } // 各チャンク10MB上限
-});
+    }),
+    limits: { fileSize: 10 * 1024 * 1024 } // 各チャンク10MB上限
+  }).single('chunk');
 
-app.post('/upload-chunk', authenticateToken, (req, res) => {
-  chunkUpload.single('chunk')(req, res, (err) => {
+  // multerミドルウェアを実行
+  uploadMiddleware(req, res, async (err) => {
     if (err) {
       console.error('チャンクアップロードエラー:', err);
       return res.status(500).json({ error: err.message });
     }
     
-    const { sessionId, chunkIndex, totalChunks } = req.body;
+    // デバッグログの追加
+    console.log('チャンクアップロードリクエスト受信:');
+    console.log('- Body:', req.body);
+    console.log('- File:', req.file ? 'ファイル有り' : 'ファイル無し');
+    
+    const sessionId = req.body.sessionId;
+    const chunkIndex = req.body.chunkIndex;
+    const totalChunks = req.body.totalChunks;
+    
+    if (!sessionId) {
+      console.error('セッションIDがありません');
+      return res.status(400).json({ error: 'セッションIDが必要です' });
+    }
+    
     const session = uploadSessions[sessionId];
     
     if (!session) {
+      // セッション情報の詳細をデバッグ表示
+      console.error(`セッション ${sessionId} が見つかりません`);
+      console.log('現在のセッション一覧:', Object.keys(uploadSessions));
       return res.status(404).json({ error: 'セッションが見つかりません' });
     }
     
@@ -1520,22 +1541,53 @@ app.get('/user/:userId/posts', async (req, res) => {
     const data = await readData();
     
     // ユーザーの投稿をフィルタリング
-    const userPosts = data.posts
-      .filter(post => post.user_id === userId)
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); // 降順にソート
+    let userPosts = [];
+    if (Array.isArray(data.posts)) {
+      userPosts = data.posts
+        .filter(post => post.user_id === userId)
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); // 降順にソート
+    } else {
+      console.warn('データの posts フィールドが配列ではありません:', data);
+    }
+    
+    console.log(`ユーザーID ${userId} の投稿が ${userPosts.length} 件見つかりました`);
     
     // ページネーション
     const startIndex = (page - 1) * limit;
     const paginatedPosts = userPosts.slice(startIndex, startIndex + limit);
     
-    console.log(`${userPosts.length}件中${paginatedPosts.length}件の投稿を取得`);
+    // 互換性のため配列として返す
+    res.json(paginatedPosts);
+  } catch (err) {
+    console.error('ユーザー投稿取得エラー:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+// もう一つの互換性のためのエンドポイント（一部のフロントエンドは /api プレフィックスを使用）
+app.get('/api/user/:userId/posts', async (req, res) => {
+  try {
+    const userId = parseInt(req.params.userId);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
     
-    res.json({ 
-      posts: paginatedPosts,
-      totalPosts: userPosts.length,
-      page: page,
-      limit: limit
-    });
+    console.log(`/api エンドポイント: ユーザーID ${userId} の投稿を取得中`);
+    
+    const data = await readData();
+    
+    // ユーザーの投稿をフィルタリング
+    let userPosts = [];
+    if (Array.isArray(data.posts)) {
+      userPosts = data.posts
+        .filter(post => post.user_id === userId)
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); // 降順にソート
+    }
+    
+    // ページネーション
+    const startIndex = (page - 1) * limit;
+    const paginatedPosts = userPosts.slice(startIndex, startIndex + limit);
+    
+    res.json(paginatedPosts);
   } catch (err) {
     console.error('ユーザー投稿取得エラー:', err);
     res.status(500).json({ error: 'サーバーエラーが発生しました' });
@@ -1574,6 +1626,165 @@ app.delete('/posts/:postId', authenticateToken, async (req, res) => {
     res.json({ message: '投稿が削除されました', post: deletedPost });
   } catch (err) {
     console.error('投稿削除エラー:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+// ユーザーの投稿を取得するAPI（フロントエンドが使用している形式に合わせる）
+app.get('/user/:userId/posts', async (req, res) => {
+  try {
+    const userId = parseInt(req.params.userId);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    
+    console.log(`ユーザーID ${userId} の投稿をページ ${page}、リミット ${limit} で取得中`);
+    
+    const data = await readData();
+    
+    // データの存在確認
+    if (!data || !Array.isArray(data.posts)) {
+      console.warn(`データ構造が不正: posts配列がありません`);
+      return res.json([]);
+    }
+    
+    // ユーザーの投稿をフィルタリング
+    const userPosts = data.posts
+      .filter(post => post.user_id === userId)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); // 新しい順にソート
+    
+    console.log(`ユーザーID ${userId} の投稿が ${userPosts.length} 件見つかりました`);
+    
+    // ページネーション
+    const startIndex = (page - 1) * limit;
+    const paginatedPosts = userPosts.slice(startIndex, startIndex + limit);
+    
+    // APIの一貫性のため配列で返す
+    res.json(paginatedPosts);
+  } catch (err) {
+    console.error('ユーザー投稿取得エラー:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+// もう一つの可能性のあるパス形式のエンドポイントも追加（代替パス）
+app.get('/posts/user/:userId', async (req, res) => {
+  try {
+    const userId = parseInt(req.params.userId);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    
+    console.log(`代替パス: ユーザーID ${userId} の投稿を取得中`);
+    
+    const data = await readData();
+    
+    if (!data || !Array.isArray(data.posts)) {
+      return res.json([]);
+    }
+    
+    const userPosts = data.posts
+      .filter(post => post.user_id === userId)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    
+    const startIndex = (page - 1) * limit;
+    const paginatedPosts = userPosts.slice(startIndex, startIndex + limit);
+    
+    res.json(paginatedPosts);
+  } catch (err) {
+    console.error('代替パスでの投稿取得エラー:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+// ログイン中のユーザー自身の投稿を取得（認証付き）
+app.get('/user/posts', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    
+    console.log(`認証済みユーザーID ${userId} の投稿をページ ${page} で取得中`);
+    
+    const data = await readData();
+    
+    if (!data || !Array.isArray(data.posts)) {
+      return res.json([]);
+    }
+    
+    const userPosts = data.posts
+      .filter(post => post.user_id === userId)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    
+    const startIndex = (page - 1) * limit;
+    const paginatedPosts = userPosts.slice(startIndex, startIndex + limit);
+    
+    res.json(paginatedPosts);
+  } catch (err) {
+    console.error('自分の投稿取得エラー:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+// ユーザーの投稿を取得するAPI（様々なパスパターンに対応）
+app.get(['/user/:userId/posts', '/api/user/:userId/posts', '/posts/user/:userId'], async (req, res) => {
+  try {
+    const userId = parseInt(req.params.userId);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    
+    console.log(`ユーザーID ${userId} の投稿をページ ${page}、リミット ${limit} で取得中`);
+    
+    const data = await readData();
+    
+    // データの存在確認
+    if (!data || !Array.isArray(data.posts)) {
+      console.warn(`データ構造が不正: posts配列がありません`);
+      return res.json([]);
+    }
+    
+    // ユーザーの投稿をフィルタリング
+    const userPosts = data.posts
+      .filter(post => post.user_id === userId)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); // 新しい順にソート
+    
+    console.log(`ユーザーID ${userId} の投稿が ${userPosts.length} 件見つかりました`);
+    
+    // ページネーション
+    const startIndex = (page - 1) * limit;
+    const paginatedPosts = userPosts.slice(startIndex, startIndex + limit);
+    
+    // APIの一貫性のため配列で返す
+    res.json(paginatedPosts);
+  } catch (err) {
+    console.error('ユーザー投稿取得エラー:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+// ログイン中のユーザー自身の投稿を取得（認証付き）- /user/posts パス向け
+app.get('/user/posts', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    
+    console.log(`認証済みユーザーID ${userId} の投稿をページ ${page} で取得中`);
+    
+    const data = await readData();
+    
+    if (!data || !Array.isArray(data.posts)) {
+      return res.json([]);
+    }
+    
+    const userPosts = data.posts
+      .filter(post => post.user_id === userId)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    
+    const startIndex = (page - 1) * limit;
+    const paginatedPosts = userPosts.slice(startIndex, startIndex + limit);
+    
+    res.json(paginatedPosts);
+  } catch (err) {
+    console.error('自分の投稿取得エラー:', err);
     res.status(500).json({ error: 'サーバーエラーが発生しました' });
   }
 });

@@ -119,10 +119,12 @@
     <button @click="goBack">戻る</button>
   </div>
   
-  <!-- メディアモーダル -->
+  <!-- メディアモーダル - 改善版 -->
   <div v-if="showMediaModal" class="media-modal" @click="closeMediaModal">
-    <div class="modal-content">
+    <div class="modal-content" @click.stop>
       <button class="close-modal" @click.stop="closeMediaModal">×</button>
+      
+      <!-- 動画の場合 -->
       <video 
         v-if="post && post.isVideo" 
         :src="post.image_url"
@@ -130,12 +132,38 @@
         autoplay
         class="modal-media"
       ></video>
-      <img 
+      
+      <!-- 画像の場合 - ズーム機能を追加 -->
+      <div 
         v-else-if="post"
-        :src="post.image_url" 
-        class="modal-media"
-        alt="Full size media"
+        class="zoomable-container"
+        @wheel.prevent="handleZoomWheel"
       >
+        <img 
+          :src="post.image_url" 
+          class="modal-media"
+          :style="zoomStyle"
+          alt="Full size media"
+          @mousedown="startDrag"
+          @mousemove="dragImage"
+          @mouseup="stopDrag"
+          @mouseleave="stopDrag"
+          @dblclick="toggleZoomLevel"
+        >
+
+        <!-- ズームコントロール -->
+        <div class="zoom-controls">
+          <button @click.stop="adjustZoom(-0.2)" class="zoom-btn">−</button>
+          <span class="zoom-level">{{ Math.round(zoomLevel * 100) }}%</span>
+          <button @click.stop="adjustZoom(0.2)" class="zoom-btn">＋</button>
+          <button @click.stop="resetZoom" class="zoom-btn reset">リセット</button>
+        </div>
+        
+        <!-- ヘルプテキスト -->
+        <div class="zoom-help">
+          ホイールスクロール: ズーム調整 / ダブルクリック: ズーム切替 / ドラッグ: 移動
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -353,16 +381,111 @@ const sharePost = () => {
   }
 };
 
+// ズーム機能のための状態
+const zoomLevel = ref(1); // 初期ズームレベル
+const zoomPosition = ref({ x: 0, y: 0 }); // 画像の位置
+const isDragging = ref(false);
+const dragStart = ref({ x: 0, y: 0 });
+const zoomLevels = [1, 1.5, 2, 3]; // プリセットズームレベル
+const zoomLevelIndex = ref(0);
+
+// ズームスタイルの計算
+const zoomStyle = computed(() => {
+  return {
+    transform: `scale(${zoomLevel.value}) translate(${zoomPosition.value.x}px, ${zoomPosition.value.y}px)`,
+    transformOrigin: 'center center',
+    cursor: isDragging.value ? 'grabbing' : 'grab'
+  };
+});
+
+// ズームレベル調整（マウスホイール用）
+const handleZoomWheel = (event) => {
+  event.preventDefault(); // ページスクロールを防止
+  
+  // ホイールの方向に応じてズームイン/アウト
+  const delta = event.deltaY > 0 ? -0.1 : 0.1;
+  adjustZoom(delta);
+};
+
+// ズームレベル調整（ボタン用）
+const adjustZoom = (delta) => {
+  const newZoom = zoomLevel.value + delta;
+  // 範囲を制限（0.5倍〜3倍）
+  zoomLevel.value = Math.max(0.5, Math.min(3, newZoom));
+};
+
+// プリセットズームレベルの切り替え（ダブルクリック用）
+const toggleZoomLevel = () => {
+  zoomLevelIndex.value = (zoomLevelIndex.value + 1) % zoomLevels.length;
+  zoomLevel.value = zoomLevels[zoomLevelIndex.value];
+  
+  // ズームが1倍になったら位置もリセット
+  if (zoomLevel.value === 1) {
+    resetZoomPosition();
+  }
+};
+
+// ズームポジションのリセット
+const resetZoom = () => {
+  zoomLevel.value = 1;
+  resetZoomPosition();
+};
+
+// ズーム位置をリセット
+const resetZoomPosition = () => {
+  zoomPosition.value = { x: 0, y: 0 };
+};
+
+// ドラッグ開始
+const startDrag = (event) => {
+  if (zoomLevel.value <= 1) return; // ズームしていない場合はドラッグ無効
+  
+  isDragging.value = true;
+  dragStart.value = {
+    x: event.clientX - zoomPosition.value.x,
+    y: event.clientY - zoomPosition.value.y
+  };
+  event.target.style.cursor = 'grabbing';
+};
+
+// ドラッグ中
+const dragImage = (event) => {
+  if (!isDragging.value) return;
+  
+  // マウス位置から新しい位置を計算
+  const newX = event.clientX - dragStart.value.x;
+  const newY = event.clientY - dragStart.value.y;
+  
+  // 画像が画面外に行き過ぎないよう制限（ズームレベルに応じて）
+  const moveLimit = 100 * (zoomLevel.value - 1);
+  zoomPosition.value = {
+    x: Math.max(-moveLimit, Math.min(moveLimit, newX)),
+    y: Math.max(-moveLimit, Math.min(moveLimit, newY))
+  };
+};
+
+// ドラッグ終了
+const stopDrag = (event) => {
+  if (isDragging.value) {
+    isDragging.value = false;
+    if (event && event.target) {
+      event.target.style.cursor = 'grab';
+    }
+  }
+};
+
 // メディアモーダル表示
 const openMediaModal = () => {
   showMediaModal.value = true;
   document.body.style.overflow = 'hidden'; // スクロール防止
+  resetZoom(); // モーダルを開くときにズームをリセット
 };
 
 // メディアモーダル閉じる
 const closeMediaModal = () => {
   showMediaModal.value = false;
   document.body.style.overflow = ''; // スクロール復活
+  resetZoom(); // モーダルを閉じるときにズームをリセット
 };
 
 onMounted(() => {
@@ -650,7 +773,7 @@ onMounted(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.9);
+  background-color: rgba(0, 0, 0, 0.85);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -661,12 +784,92 @@ onMounted(() => {
   position: relative;
   max-width: 90vw;
   max-height: 90vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
 }
 
+/* ズーム可能なコンテナ */
+.zoomable-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+
+/* モーダル内のメディア表示改善 */
 .modal-media {
-  max-width: 100%;
-  max-height: 100%;
+  max-width: 85vw;  /* 少し小さくして見やすく */
+  max-height: 85vh; /* 少し小さくして見やすく */
   object-fit: contain;
+  transition: transform 0.1s ease;
+  user-select: none; /* テキスト選択を防止 */
+}
+
+/* ズームコントロール */
+.zoom-controls {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.6);
+  padding: 8px 12px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 1001;
+}
+
+.zoom-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  background-color: rgba(255, 255, 255, 0.2);
+  color: white;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+}
+
+.zoom-btn:hover {
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+.zoom-btn.reset {
+  border-radius: 15px;
+  width: auto;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+.zoom-level {
+  color: white;
+  font-size: 14px;
+  min-width: 50px;
+  text-align: center;
+}
+
+/* ヘルプテキスト */
+.zoom-help {
+  position: absolute;
+  bottom: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  background-color: rgba(0, 0, 0, 0.5);
+  padding: 5px 10px;
+  border-radius: 10px;
+  opacity: 0.7;
 }
 
 .close-modal {
@@ -678,5 +881,6 @@ onMounted(() => {
   color: white;
   font-size: 30px;
   cursor: pointer;
+  z-index: 1002;
 }
 </style>

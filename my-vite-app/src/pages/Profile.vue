@@ -14,6 +14,7 @@
       <div class="profile-header">
         <div class="profile-avatar">
           <img v-if="user && user.avatar" :src="user.avatar" alt="プロフィール画像" />
+          <img v-else-if="user && user.icon_url" :src="user.icon_url" alt="プロフィール画像" />
           <div v-else class="avatar-placeholder">{{ userInitials }}</div>
         </div>
         
@@ -37,12 +38,45 @@
         
         <div v-else class="posts-list">
           <div v-for="post in posts" :key="post.id" class="post-item">
+            <!-- 投稿メディア（画像または動画） -->
+            <div class="post-media">
+              <video 
+                v-if="post.isVideo" 
+                :src="post.image_url" 
+                controls
+                class="post-image"
+              ></video>
+              <img 
+                v-else 
+                :src="post.image_url" 
+                alt="投稿画像" 
+                class="post-image"
+                @click="openDetailPage(post.id)"
+              />
+            </div>
+            
             <div class="post-content">
-              <p class="post-text">{{ post.content }}</p>
-              <p class="post-date">{{ formatDate(post.createdAt) }}</p>
+              <p class="post-text">{{ post.message }}</p>
+              <div class="post-meta">
+                <p class="post-date">{{ formatDate(post.created_at) }}</p>
+                <div class="post-stats">
+                  <span class="like-count">❤️ {{ post.likeCount || 0 }}</span>
+                  <span class="bookmark-count">🔖 {{ post.bookmarkCount || 0 }}</span>
+                </div>
+              </div>
+              
+              <!-- タグ表示 -->
+              <div v-if="post.tags && post.tags.length > 0" class="post-tags">
+                <span v-for="tag in post.tags" :key="tag" class="tag">
+                  #{{ tag }}
+                </span>
+              </div>
             </div>
             
             <div class="post-actions">
+              <button @click="openDetailPage(post.id)" class="detail-button">
+                詳細
+              </button>
               <button @click="deletePost(post.id)" class="delete-button">
                 削除
               </button>
@@ -51,6 +85,7 @@
         </div>
         
         <div v-if="loadingPosts" class="loading-more">
+          <div class="small-spinner"></div>
           投稿を読み込み中...
         </div>
         
@@ -170,6 +205,7 @@ const loadPosts = async () => {
     loadingPosts.value = true;
     console.log(`Fetching posts for user ID: ${user.value.id}`);
     
+    // ユーザーの投稿取得APIを呼び出し
     const response = await api.posts.getUserPosts({
       userId: user.value.id,
       page: 1,
@@ -178,16 +214,34 @@ const loadPosts = async () => {
     
     console.log('Posts API response:', response);
     
-    if (response && Array.isArray(response.posts)) {
+    // 様々なレスポンス形式に対応
+    if (response && response.posts && Array.isArray(response.posts)) {
+      // オブジェクト内posts配列
       posts.value = response.posts;
-      hasMorePosts.value = posts.value.length >= postsPerPage;
+      hasMorePosts.value = response.posts.length >= postsPerPage;
+    } else if (Array.isArray(response)) {
+      // 配列が直接返される場合
+      posts.value = response;
+      hasMorePosts.value = response.length >= postsPerPage;
+    } else if (response && typeof response === 'object') {
+      // その他のオブジェクト形式
+      const possiblePostsArray = Object.values(response).find(val => Array.isArray(val));
+      if (possiblePostsArray) {
+        posts.value = possiblePostsArray;
+        hasMorePosts.value = possiblePostsArray.length >= postsPerPage;
+      } else {
+        console.warn('投稿データが見つかりません:', response);
+        posts.value = [];
+        hasMorePosts.value = false;
+      }
     } else {
       console.warn('Unexpected posts response format:', response);
-      posts.value = response && response.posts ? response.posts : [];
+      posts.value = [];
       hasMorePosts.value = false;
     }
     
     currentPage.value = 1;
+    console.log(`取得した投稿数: ${posts.value.length}件`);
   } catch (err) {
     console.error('投稿取得エラー:', err);
     throw new Error('投稿の取得に失敗しました');
@@ -256,6 +310,11 @@ const formatDate = (dateString) => {
 // 編集ページに遷移する関数
 const navigateToEdit = () => {
   router.push('/edit-profile');
+};
+
+// 詳細ページに遷移
+const openDetailPage = (postId) => {
+  router.push(`/detail/${postId}`);
 };
 </script>
 
@@ -354,16 +413,30 @@ const navigateToEdit = () => {
 .posts-list {
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  gap: 20px;
 }
 
 .post-item {
   display: flex;
-  justify-content: space-between;
-  padding: 15px;
+  flex-direction: column;
+  padding: 20px;
   border: 1px solid #eee;
-  border-radius: 4px;
+  border-radius: 8px;
   background-color: #fff;
+}
+
+.post-media {
+  margin-bottom: 15px;
+  overflow: hidden;
+  border-radius: 8px;
+  max-height: 300px;
+}
+
+.post-image {
+  width: 100%;
+  max-height: 300px;
+  object-fit: contain;
+  cursor: pointer;
 }
 
 .post-content {
@@ -373,6 +446,15 @@ const navigateToEdit = () => {
 .post-text {
   margin: 0 0 10px 0;
   font-size: 16px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.post-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
 }
 
 .post-date {
@@ -381,9 +463,43 @@ const navigateToEdit = () => {
   color: #888;
 }
 
+.post-stats {
+  display: flex;
+  gap: 15px;
+  font-size: 14px;
+  color: #555;
+}
+
+.post-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.tag {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+}
+
 .post-actions {
   display: flex;
-  align-items: start;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.detail-button {
+  background-color: #2196f3;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
 }
 
 .delete-button {
@@ -397,9 +513,21 @@ const navigateToEdit = () => {
 }
 
 .loading-more {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   padding: 15px;
   color: #666;
+}
+
+.small-spinner {
+  width: 20px;
+  height: 20px;
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #2e7d32;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
 }
 
 .load-more-button {
