@@ -301,8 +301,8 @@ const cancelEdit = () => {
   error.value = null;
   successMessage.value = '';
   
-  // ホーム画面に戻る
-  router.push('/');
+  // 修正: ホームではなくマイプロフィールに戻る
+  router.push('/profile');
 };
 </script>
 

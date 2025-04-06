@@ -45,6 +45,18 @@ const routes = [
     }
   },
   {
+    path: '/profile',
+    name: 'Profile',
+    component: Profile,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/edit-profile',
+    name: 'EditProfile',
+    component: EditProfile,
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/tags',
     component: Tags,
     meta: {

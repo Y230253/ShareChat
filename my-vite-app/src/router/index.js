@@ -2,14 +2,14 @@ import { createRouter, createWebHistory } from 'vue-router';
 import authStore from '../authStore.js';
 
 // ルート定義
-import Home from '../views/Home.vue';
-import Login from '../views/Login.vue';
-import Register from '../views/Register.vue';
-import Profile from '../views/Profile.vue';
-import PostDetail from '../views/PostDetail.vue';
-import NotFound from '../views/NotFound.vue';
+import Home from '../pages/Home.vue';
+import Login from '../pages/Login.vue';
+import Register from '../pages/Register.vue';
+import Profile from '../pages/Profile.vue';
+import PostDetail from '../pages/PostDetail.vue';
+import NotFound from '../pages/NotFound.vue';
 import UserRegister from '../pages/UserRegister.vue';
-import EditProfile from '../views/EditProfile.vue';
+import EditProfile from '../pages/EditProfile.vue';
 
 const routes = [
   { path: '/', component: Home },
@@ -19,13 +19,13 @@ const routes = [
   {
     path: '/profile',
     name: 'Profile',
-    component: () => import('../views/Profile.vue'),
+    component: Profile,
     meta: { requiresAuth: true }
   },
   {
     path: '/edit-profile',
     name: 'EditProfile',
-    component: () => import('../views/EditProfile.vue'),
+    component: EditProfile,
     meta: { requiresAuth: true }
   },
   { path: '/posts/:id', component: PostDetail },

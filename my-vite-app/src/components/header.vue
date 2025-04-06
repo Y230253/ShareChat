@@ -18,16 +18,6 @@ onMounted(() => {
   authStore.initAuth();
 });
 
-const goToRegister = () => {
-  console.log("Navigating to /register")
-  router.push('/register').catch(err => console.error(err))
-}
-
-const goToLogin = () => {
-  console.log("Navigating to /login")
-  router.push('/login').catch(err => console.error(err))
-}
-
 const logout = () => {
   authStore.clearUser();
   router.push('/login');
@@ -40,12 +30,8 @@ const logout = () => {
     
     <!-- 非ログイン時のみ表示 -->
     <div v-if="!isLoggedIn" class="auth-buttons">
-      <button class="register" @click="goToRegister">
-        <router-link to="/register">新規登録</router-link>
-      </button>
-      <button class="login" @click="goToLogin">
-        <router-link to="/login">ログイン</router-link>
-      </button>
+      <router-link to="/register" class="register">新規登録</router-link>
+      <router-link to="/login" class="login">ログイン</router-link>
     </div>
     
     <!-- ログイン時のみ表示 -->
