@@ -48,7 +48,7 @@ const routes = [
   },
   {
     path: '/edit-profile',
-    compponent: () => import('../src/pages/EditProfile.vue'),
+    component: () => import('../src/pages/EditProfile.vue'),
     meta: { layout: 'default', showPhotoList: false, timestamp: buildTimestamp }
   },
   {

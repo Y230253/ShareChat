@@ -14,20 +14,19 @@ import FavoritePage from './pages/Favorite.vue'
 import TagsPage from './pages/Tags.vue'
 import ProfilePage from './pages/Profile.vue'
 import EditProfilePage from './pages/EditProfile.vue'
-
-// User.vueは存在しないため削除
+import UserRegisterPage from './pages/UserRegister.vue'  // UserRegisterコンポーネントをインポート
 
 // ルート定義
 const routes = [
   { path: '/', component: HomePage },
   { path: '/login', component: LoginPage },
+  { path: '/register', component: UserRegisterPage },  // 登録ルートを追加
   { path: '/posts', component: PostFormPage },
   { path: '/detail/:id', component: DetailPostPage },
   { path: '/favorite', component: FavoritePage },
   { path: '/tags', component: TagsPage },
   { path: '/profile', component: ProfilePage },
   { path: '/edit-profile', component: EditProfilePage },
-  // User.vueへのルートも削除
 ]
 
 // ルーターの作成

@@ -121,47 +121,35 @@ export async function compressImage(imageFile, options = {}) {
  * @returns {boolean} - 圧縮が必要ならtrue、不要ならfalse
  */
 export function shouldCompress(file, threshold = 5) {
-  const thresholdBytes = threshold * 1024 * 1024;
-  return file.size > thresholdBytes;
+  // 画像ファイルかつ指定サイズ以上の場合に圧縮
+  return file.type.startsWith('image/') && file.size > threshold * 1024 * 1024;
 }
 
 /**
- * メディアファイルを最適化する関数
- * @param {File} file - 最適化するファイル
- * @param {Object} options - 圧縮オプション
- * @returns {Promise<File>} - 最適化されたファイル
+ * メディアを最適化する関数 - 画像と動画を適切に処理
+ * @param {File} mediaFile - 最適化するメディアファイル
+ * @param {Object} options - 最適化オプション
+ * @returns {Promise<File>} - 最適化後のメディアファイル
  */
-export async function optimizeMedia(file, options = {}) {
-  // ファイルタイプによって処理を分ける
-  if (file.type.startsWith('image/')) {
-    // 画像の場合
-    if (shouldCompress(file, options.threshold || 5)) {
-      try {
-        console.log('画像の圧縮を開始します');
-        const compressedFile = await compressImage(file, options);
-        
-        // 圧縮結果のログ
-        const originalSize = (file.size / (1024 * 1024)).toFixed(2);
-        const compressedSize = (compressedFile.size / (1024 * 1024)).toFixed(2);
-        const ratio = Math.round((compressedFile.size / file.size) * 100);
-        
-        console.log(`圧縮完了: ${originalSize}MB → ${compressedSize}MB (${ratio}%)`);
-        
-        return compressedFile;
-      } catch (err) {
-        console.warn('画像の圧縮に失敗したため、元のファイルを使用します:', err);
-        return file;
-      }
-    }
-  } else if (file.type.startsWith('video/')) {
-    // 動画の場合は警告を表示
-    if (file.size > 10 * 1024 * 1024) {
-      console.warn('大容量動画ファイルです。サーバーの制限により処理できない可能性があります。');
+export async function optimizeMedia(mediaFile, options = {}) {
+  console.log(`メディア最適化開始: ${mediaFile.name}, サイズ: ${(mediaFile.size / (1024 * 1024)).toFixed(2)}MB`);
+  
+  // 画像の場合は圧縮を試みる
+  if (mediaFile.type.startsWith('image/')) {
+    try {
+      const compressedFile = await compressImage(mediaFile, options);
+      console.log(`画像圧縮結果: ${(mediaFile.size / (1024 * 1024)).toFixed(2)}MB → ${(compressedFile.size / (1024 * 1024)).toFixed(2)}MB`);
+      return compressedFile;
+    } catch (err) {
+      console.error('画像圧縮エラー:', err);
+      // 圧縮失敗時は元のファイルを返す
+      return mediaFile;
     }
   }
   
-  // 圧縮不要のファイルの場合は元のファイルをそのまま返す
-  return file;
+  // 動画の場合は現状では元のままで返す（将来的に動画圧縮機能を追加可能）
+  console.log(`動画ファイルのため圧縮をスキップします: ${mediaFile.name}`);
+  return mediaFile;
 }
 
 export default {

@@ -150,13 +150,19 @@ export async function uploadFile(file, onProgress = null) {
 
   console.log(`ファイルアップロード開始: ${url}, ファイル名: ${file.name}, サイズ: ${file.size}バイト`);
   
-  // ファイルサイズが小さい場合は直接アップロード
-  const smallFileLimit = 8 * 1024 * 1024; // 8MB未満なら直接アップロード
+  // サイズに基づいてアップロード方法を選択
+  const smallFileLimit = 50 * 1024 * 1024; // 50MB
+  const mediumFileLimit = 100 * 1024 * 1024; // 100MB
+  
   if (file.size < smallFileLimit) {
+    // 小さなファイルは直接アップロード
     return directUpload(file, url, onProgress);
-  } else {
-    // 大きなファイルはチャンクアップロードを使用
+  } else if (file.size < mediumFileLimit) {
+    // 中程度のファイルはチャンクアップロード
     return chunkUpload(file, onProgress);
+  } else {
+    // 大きなファイルはResumable Uploadを使用
+    return resumableUpload(file, onProgress);
   }
 }
 
@@ -265,7 +271,7 @@ async function directUpload(file, url, onProgress) {
   });
 }
 
-// 改良版チャンクアップロード実装
+// チャンクアップロード
 async function chunkUpload(file, onProgress) {
   console.log(`チャンクアップロードを開始します: ${file.name}, サイズ: ${(file.size / (1024 * 1024)).toFixed(2)}MB`);
   
@@ -491,10 +497,45 @@ async function chunkUpload(file, onProgress) {
     // アップロード完了通知
     console.log(`チャンクアップロードが完了しました。結合処理を開始します。(${uploadedChunks}/${totalChunks}チャンク完了)`);
     
-    // ********* 重要: 結合処理を要求しないように変更 *********
-    // チャンクアップロード完了後、サーバーが自動的に処理するのを待つ
     console.log('サーバーによる自動ファイル結合を待機しています...');
-    await new Promise(resolve => setTimeout(resolve, 15000)); // 15秒待機
+    
+    // サーバーに明示的に結合処理をリクエスト
+    try {
+      console.log('アップロード完了をサーバーに通知しています...');
+      const completeResponse = await fetch(`${API_BASE_URL}/upload-session/complete`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { 'Authorization': `Bearer ${localStorage.getItem('token')}` } : {})
+        },
+        body: JSON.stringify({ 
+          sessionId,
+          filename: file.name, 
+          fileType: file.type
+        })
+      });
+
+      if (completeResponse.ok) {
+        const result = await completeResponse.json();
+        console.log('サーバーからの完了応答:', result);
+        
+        // サーバーが直接 imageUrl を返したらそれを使用
+        if (result && result.imageUrl) {
+          return {
+            imageUrl: result.imageUrl,
+            isVideo: result.isVideo || file.type.startsWith('video/'),
+            isFallback: false
+          };
+        }
+      } else {
+        console.warn(`アップロード完了通知でエラー: ${completeResponse.status}`);
+      }
+    } catch (completeError) {
+      console.error('アップロード完了通知エラー:', completeError);
+    }
+
+    // 10秒待機（サーバー側の処理完了を待つ）
+    await new Promise(resolve => setTimeout(resolve, 10000));
     
     // ファイルの保存場所を推測してアクセスを試みる
     return await retrieveUploadedFile(sessionId, file.name, file.type);
@@ -515,9 +556,192 @@ async function chunkUpload(file, onProgress) {
   }
 }
 
-// サーバーから結合済みファイルを取得するための新しい関数
+// 大容量ファイル向けのResumable Upload
+async function resumableUpload(file, onProgress) {
+  console.log(`Resumable Upload開始: ${file.name}, サイズ: ${(file.size / (1024 * 1024)).toFixed(2)}MB`);
+  
+  try {
+    // ステップ1: バックエンドからResumable Upload URLを取得
+    console.log('Resumable Upload URLをリクエスト中...');
+    const sessionResponse = await fetch(`${API_BASE_URL}/create-resumable-upload`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(localStorage.getItem('token') ? { 'Authorization': `Bearer ${localStorage.getItem('token')}` } : {})
+      },
+      body: JSON.stringify({
+        filename: file.name,
+        fileType: file.type,
+        fileSize: file.size
+      })
+    });
+
+    if (!sessionResponse.ok) {
+      throw new Error(`Resumable Upload URLの取得に失敗: ${sessionResponse.status}`);
+    }
+
+    const { uploadUrl, sessionId } = await sessionResponse.json();
+    console.log(`Resumable Upload URL取得成功: ${sessionId}`);
+
+    // ステップ2: XMLHttpRequestを使ってResumable Upload
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      
+      // 進捗イベントの設定
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && onProgress) {
+          const progress = Math.round((event.loaded / event.total) * 100);
+          onProgress(progress);
+        }
+      };
+      
+      xhr.onload = async () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          // 完了時に100%の進捗を通知
+          if (onProgress) onProgress(100);
+          
+          try {
+            // アップロード完了後、ファイルURLを取得
+            const finalizeResponse = await fetch(`${API_BASE_URL}/finalize-upload/${sessionId}`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(localStorage.getItem('token') ? { 'Authorization': `Bearer ${localStorage.getItem('token')}` } : {})
+              }
+            });
+            
+            if (finalizeResponse.ok) {
+              const result = await finalizeResponse.json();
+              console.log('Resumable Upload完了:', result);
+              resolve(result);
+            } else {
+              throw new Error(`アップロード完了処理に失敗: ${finalizeResponse.status}`);
+            }
+          } catch (error) {
+            console.error('アップロード完了処理エラー:', error);
+            reject(error);
+          }
+        } else {
+          let errorMsg = 'アップロードエラー';
+          try {
+            const errorData = JSON.parse(xhr.responseText);
+            errorMsg = errorData.error || errorData.message || errorMsg;
+          } catch (e) {
+            // レスポンスがJSONでない場合
+            errorMsg = xhr.statusText || errorMsg;
+          }
+          reject(new Error(`${xhr.status}: ${errorMsg}`));
+        }
+      };
+      
+      xhr.onerror = () => {
+        reject(new Error('ネットワークエラーによりアップロードに失敗しました'));
+      };
+      
+      xhr.onabort = () => {
+        reject(new Error('アップロードが中止されました'));
+      };
+      
+      // タイムアウト設定を長く
+      xhr.timeout = 3600000; // 1時間
+      
+      xhr.ontimeout = () => {
+        reject(new Error('アップロードがタイムアウトしました'));
+      };
+      
+      // Resumable UploadのURLにPUT
+      xhr.open('PUT', uploadUrl, true);
+      xhr.setRequestHeader('Content-Type', file.type);
+      xhr.send(file);
+    });
+  } catch (error) {
+    console.error('Resumable Uploadエラー:', error);
+    
+    // フォールバック: チャンクアップロードを試す
+    console.log('Resumable Uploadに失敗したため、チャンクアップロードを試みます');
+    return chunkUpload(file, onProgress);
+  }
+}
+
+// 大容量ファイルアップロード - 改善版
+export async function uploadLargeFile(file, onProgress) {
+  console.log(`大容量ファイル処理: ${file.name}、サイズ: ${(file.size / (1024 * 1024)).toFixed(2)}MB`);
+  
+  // 非常に大きいファイルの警告
+  const maxFileSize = 2 * 1024 * 1024 * 1024; // 2GB
+  if (file.size > maxFileSize) {
+    console.warn(`ファイルサイズが2GB制限を超えています: ${(file.size / (1024 * 1024 * 1024)).toFixed(2)}GB`);
+    
+    if (!confirm(`ファイルサイズが非常に大きいため (${(file.size / (1024 * 1024 * 1024)).toFixed(2)}GB)、アップロードに失敗する可能性が高いです。\n続行しますか？`)) {
+      return {
+        imageUrl: `https://picsum.photos/seed/${Date.now()}/800/600`,
+        isVideo: file.type.startsWith('video/'),
+        isFallback: true,
+        error: 'ユーザーによるキャンセル'
+      };
+    }
+  }
+
+  // 最適なアップロード方法を選択
+  return resumableUpload(file, onProgress);
+}
+
+// サーバーから結合済みファイルを取得するための関数
 async function retrieveUploadedFile(sessionId, filename, fileType) {
   console.log(`サーバーからアップロードしたファイルを取得中... (sessionId: ${sessionId})`);
+
+  // 実際のファイルパスを見つけるサーバー側API（新エンドポイント）を利用する
+  try {
+    console.log('専用APIでファイル情報をリクエスト中...');
+    const response = await fetch(`${API_BASE_URL}/upload-info/${sessionId}`, {
+      cache: 'no-store' // キャッシュを使わず常に最新を取得
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      console.log('ファイル情報APIから取得成功:', data);
+      
+      if (data.url) {
+        return {
+          imageUrl: data.url,
+          isVideo: data.isVideo || fileType.startsWith('video/'),
+          thumbnailUrl: data.thumbnail_url || null,
+          isFallback: false
+        };
+      }
+    } else {
+      console.warn(`ファイル情報API失敗: ${response.status}`);
+    }
+  } catch (e) {
+    console.warn('ファイル情報APIエラー:', e);
+  }
+
+  // 追加APIエンドポイントを試す
+  const additionalAPIs = [
+    `/file-info?sessionId=${sessionId}`,
+    `/file-metadata/${sessionId}`
+  ];
+  
+  for (const apiPath of additionalAPIs) {
+    try {
+      console.log(`代替APIを試行: ${apiPath}`);
+      const response = await fetch(`${API_BASE_URL}${apiPath}`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('代替APIから取得成功:', data);
+        if (data.url) {
+          return {
+            imageUrl: data.url,
+            isVideo: data.isVideo || fileType.startsWith('video/'),
+            thumbnailUrl: data.thumbnail_url || null,
+            isFallback: false
+          };
+        }
+      }
+    } catch (e) {
+      console.warn(`代替API ${apiPath} エラー:`, e);
+    }
+  }
 
   const filenameWithoutExt = filename.split('.').slice(0, -1).join('.');
   const sanitizedFilename = filenameWithoutExt.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
@@ -525,79 +749,26 @@ async function retrieveUploadedFile(sessionId, filename, fileType) {
 
   // ファイル命名パターンを増やす
   const timestamp = sessionId.split('-')[0];
-  const date = new Date(parseInt(timestamp));
-  const dateStr = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
   
   // サーバーでの保存場所を推測する複数のパス
   const possiblePaths = [
+    // 最も可能性の高いパス（上に配置）
+    `/uploads/${sessionId}.${fileExt}`,
+    `/uploads/${timestamp}-${sanitizedFilename}.${fileExt}`,
+    
     // 標準的な保存パターン
     `/uploads/${sanitizedFilename}_${timestamp}.${fileExt}`,
     `/uploads/${sessionId.split('-')[0]}_${sanitizedFilename}.${fileExt}`,
-    `/uploads/${sessionId}.${fileExt}`,
-    
-    // 日付パターン
-    `/uploads/${dateStr}/${sanitizedFilename}.${fileExt}`,
-    `/uploads/${dateStr}_${sanitizedFilename}.${fileExt}`,
-    
-    // 動的フォルダ構造
-    `/media/uploads/${timestamp.substring(0, 6)}/${sessionId}.${fileExt}`,
-    `/static/media/${sessionId}.${fileExt}`,
-    
-    // セッションIDだけのパターン
-    `/files/${sessionId}`,
-    `/files/${timestamp}_${sanitizedFilename}`,
-    
-    // API経由でのアクセス
-    `/api/files/${sessionId}`,
-    `/download/${sessionId}`,
-    
-    // サーバー独自のパスパターン
-    `/user_uploads/${sessionId}.${fileExt}`,
-    `/processed/${sanitizedFilename}.${fileExt}`
   ];
   
+  // ファイルタイプに基づいて追加パスを追加
   if (fileType.startsWith('video/')) {
-    possiblePaths.unshift(`/videos/${sessionId}.${fileExt}`);
-    possiblePaths.unshift(`/videos/${sanitizedFilename}.${fileExt}`);
+    possiblePaths.unshift(`/uploads/${sessionId}.mp4`);
   } else if (fileType.startsWith('image/')) {
-    possiblePaths.unshift(`/images/${sessionId}.${fileExt}`);
-    possiblePaths.unshift(`/images/${sanitizedFilename}.${fileExt}`);
+    possiblePaths.unshift(`/uploads/${sessionId}.${fileExt}`);
   }
   
   console.log('可能性のあるファイルパスを確認中...');
-  
-  // 実際のファイルパスを見つけるサーバー側API（あれば）を利用する
-  try {
-    // ファイル情報APIエンドポイント試行（サーバーによって異なるパターン）
-    const possibleAPIs = [
-      `/upload-info/${sessionId}`,
-      `/file-info?sessionId=${sessionId}`,
-      `/file-metadata/${sessionId}`
-    ];
-    
-    for (const apiPath of possibleAPIs) {
-      try {
-        const response = await fetch(`${API_BASE_URL}${apiPath}`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data.url || data.path || data.file_url) {
-            const fileUrl = data.url || data.path || data.file_url;
-            console.log(`ファイル情報APIから取得したURL: ${fileUrl}`);
-            return {
-              imageUrl: fileUrl.startsWith('http') ? fileUrl : `${API_BASE_URL}${fileUrl}`,
-              isVideo: fileType.startsWith('video/'),
-              thumbnailUrl: data.thumbnail_url || null,
-              isFallback: false
-            };
-          }
-        }
-      } catch (e) {
-        // APIが存在しない場合は次を試す
-      }
-    }
-  } catch (e) {
-    console.log('ファイル情報APIの試行に失敗:', e);
-  }
   
   // サーバーのフォルダ構造を探す
   let fullUrl = null;
@@ -607,20 +778,48 @@ async function retrieveUploadedFile(sessionId, filename, fileType) {
     console.log(`ファイルパス確認: ${url}`);
     
     try {
-      // no-corsモードでリンク確認
-      await fetch(url, { method: 'HEAD', mode: 'no-cors' });
-      fullUrl = url;
-      console.log(`有効なファイルパスを発見: ${url}`);
-      break;
+      // HEAD リクエストでファイルの存在確認（GETは重いのでHEADを使用）
+      const response = await fetch(url, { 
+        method: 'HEAD',
+        mode: 'cors',
+        cache: 'no-store'
+      });
+      
+      if (response.ok) {
+        fullUrl = url;
+        console.log(`有効なファイルパスを発見: ${url}`);
+        break;
+      }
     } catch (e) {
       // エラーの場合は次のパスを試す
     }
   }
   
-  // 特定のパスが見つからない場合、最も可能性の高いパスを使用
+  // 特定のパスが見つからない場合、Cloud Storage直接リンクを試す
+  if (!fullUrl) {
+    const storageUrl = `https://storage.googleapis.com/${API_BASE_URL.includes('localhost') ? 'sharechat-media-bucket' : bucketName}/uploads/${sessionId}.${fileExt}`;
+    console.log(`Storageパスを試行: ${storageUrl}`);
+    
+    try {
+      const response = await fetch(storageUrl, { 
+        method: 'HEAD',
+        mode: 'cors',
+        cache: 'no-store'
+      });
+      
+      if (response.ok) {
+        fullUrl = storageUrl;
+        console.log(`Storageパス発見: ${storageUrl}`);
+      }
+    } catch (e) {
+      console.log('Storageパス試行中のエラー:', e);
+    }
+  }
+  
+  // それでも見つからない場合、デフォルトパスに設定
   if (!fullUrl) {
     console.log('確認できるファイルパスが見つからないため、最も可能性の高いパスを使用します');
-    fullUrl = `${API_BASE_URL}/uploads/${sessionId}.${fileExt}`;
+    fullUrl = `https://storage.googleapis.com/${bucketName}/uploads/${sessionId}.${fileExt}`;
   }
   
   // サムネイルURLの計算
@@ -636,26 +835,11 @@ async function retrieveUploadedFile(sessionId, filename, fileType) {
   console.info(`ファイル名: ${filename}`);
   console.info(`推定URL: ${fullUrl}`);
   
-  // 保存場所の情報をローカルストレージに保存（後からアクセスできるように）
-  try {
-    const uploadInfo = {
-      sessionId,
-      filename,
-      fileType,
-      url: fullUrl,
-      timestamp: Date.now()
-    };
-    localStorage.setItem(`lastUpload_${sessionId}`, JSON.stringify(uploadInfo));
-  } catch (e) {
-    console.warn('ローカルストレージへの保存に失敗:', e);
-  }
-  
   return {
     imageUrl: fullUrl,
     isVideo: fileType.startsWith('video/'),
     thumbnailUrl: thumbnailUrl,
-    isFallback: false,
-    allPaths: possiblePaths.map(path => `${API_BASE_URL}${path}`) // すべてのパスを含める
+    isFallback: false
   };
 }
 
@@ -1039,28 +1223,5 @@ export const api = {
     })
   }
 };
-
-// 大容量ファイルアップロード - 改善版（古いバージョンを削除）
-export async function uploadLargeFile(file, onProgress) {
-  console.log(`大容量ファイル処理: ${file.name}、サイズ: ${(file.size / (1024 * 1024)).toFixed(2)}MB`);
-  
-  // 非常に大きいファイルのチェック
-  const maxFileSize = 2 * 1024 * 1024 * 1024; // 2GB
-  if (file.size > maxFileSize) {
-    console.warn(`ファイルサイズが2GB制限を超えています: ${(file.size / (1024 * 1024 * 1024)).toFixed(2)}GB`);
-    
-    if (!confirm(`ファイルサイズが非常に大きいため (${(file.size / (1024 * 1024 * 1024)).toFixed(2)}GB)、アップロードに失敗する可能性が高いです。\n続行しますか？`)) {
-      return {
-        imageUrl: `https://picsum.photos/seed/${Date.now()}/800/600`,
-        isVideo: file.type.startsWith('video/'),
-        isFallback: true,
-        error: 'ユーザーによるキャンセル'
-      };
-    }
-  }
-  
-  // 適切なサイズのチャンクでアップロード
-  return await chunkUpload(file, onProgress);
-}
 
 export default api;

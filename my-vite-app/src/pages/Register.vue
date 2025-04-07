@@ -22,13 +22,8 @@ const successMessage = ref('');
 // アバターのアップロード処理
 const handleAvatarChange = (e) => {
   const file = e.target.files[0];
-  if (!file) return;
   
-  // ファイルタイプのバリデーション
-  if (!file.type.startsWith('image/')) {
-    error.value = '画像ファイルのみアップロードできます。';
-    return;
-  }
+  if (!file) return;
   
   // ファイルサイズのバリデーション (5MB)
   if (file.size > 5 * 1024 * 1024) {
@@ -62,78 +57,63 @@ const handleSubmit = async () => {
       return;
     }
     
-    if (!email.value.trim()) {
-      error.value = 'メールアドレスは必須です。';
+    // ユーザー名に特殊文字がないかチェック
+    const usernameRegex = /^[a-zA-Z0-9_]+$/;
+    if (!usernameRegex.test(username.value)) {
+      error.value = 'ユーザー名には英数字とアンダースコアのみ使用できます。';
       return;
     }
-    
-    if (!password.value) {
-      error.value = 'パスワードは必須です。';
+
+    // メールアドレスの形式チェック
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.value)) {
+      error.value = '有効なメールアドレスを入力してください。';
       return;
     }
-    
-    if (password.value !== confirmPassword.value) {
-      error.value = 'パスワードと確認用パスワードが一致しません。';
+
+    // パスワードの強度チェック (最低6文字)
+    if (password.value.length < 6) {
+      error.value = 'パスワードは6文字以上である必要があります。';
       return;
     }
-    
+
     loading.value = true;
-    error.value = '';
+
+    // フォームデータの作成
+    const formData = new FormData();
+    formData.append('username', username.value);
+    formData.append('email', email.value);
+    formData.append('password', password.value);
     
-    // アバター画像のアップロード（もしあれば）
-    let avatarUrl = '';
+    // アバターがある場合
     if (avatar.value) {
-      try {
-        console.log('アバター画像をアップロード中...');
-        const uploadResult = await api.upload(avatar.value);
-        if (uploadResult && uploadResult.imageUrl) {
-          avatarUrl = uploadResult.imageUrl;
-          console.log('アバター画像のアップロードに成功:', avatarUrl);
-        }
-      } catch (uploadError) {
-        console.error('アバター画像のアップロードに失敗:', uploadError);
-        // アバターのアップロードに失敗しても登録は続行
-      }
+      formData.append('icon', avatar.value);
     }
-    
-    // ユーザー登録APIを呼び出し
-    const userData = {
-      username: username.value,
-      email: email.value,
-      password: password.value,
-      avatar: avatarUrl
-    };
-    
-    console.log('ユーザー登録処理を開始:', userData.email);
-    const response = await api.auth.register(userData);
-    
-    if (!response || !response.token) {
-      throw new Error('登録に失敗しました。サーバーからの応答が不正です。');
+
+    // APIリクエスト
+    const response = await fetch('/register', {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!response.ok) {
+      const data = await response.json();
+      error.value = data.error || '登録に失敗しました。';
+      loading.value = false;
+      return;
     }
-    
-    // アバター情報を含めてユーザー情報を設定
-    const user = {
-      ...response,
-      username: username.value,
-      email: email.value,
-      avatar: avatarUrl
-    };
-    
-    // 認証情報を保存
-    authStore.setUser(user);
-    
-    // 成功メッセージを表示
-    successMessage.value = '登録に成功しました！ホームページにリダイレクトします。';
-    
-    // 3秒後にホームページへリダイレクト
+
+    // 登録成功
+    success.value = '登録が完了しました！ログインページに移動します...';
+    loading.value = false;
+
+    // ログインページにリダイレクト
     setTimeout(() => {
-      router.push('/');
-    }, 3000);
+      router.push('/login');
+    }, 2000);
     
   } catch (err) {
-    console.error('登録エラー:', err);
-    error.value = err.message || '登録に失敗しました。もう一度お試しください。';
-  } finally {
+    error.value = 'エラーが発生しました: ' + err.message;
     loading.value = false;
   }
 };

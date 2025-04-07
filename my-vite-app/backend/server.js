@@ -395,7 +395,7 @@ async function handleRegister(req, res) {
     }
     
     const newUser = {
-      id: userData.users.length ? userData.users[userData.users.length - 1].id + 1 : 1,
+      id: userData.users.length ? userData.users[userData.users[userData.users.length - 1].id + 1 ]: 1,
       username,
       email,
       password: hashedPassword,
@@ -1421,14 +1421,25 @@ app.post('/upload-session/complete', authenticateToken, async (req, res) => {
     fsSync.unlinkSync(finalLocalPath);
     fsSync.rmdirSync(session.sessionDir, { recursive: true });
     
-    // セッション情報を削除
-    delete uploadSessions[sessionId];
+    // セッション情報を更新して保存（アップロード情報APIのために必要）
+    session.status = 'completed';
+    session.completedAt = new Date();
+    session.filePath = filePath;
+    session.publicUrl = publicUrl;
+    session.isVideo = isVideo;
     
     // 成功レスポンス
     res.json({ 
       imageUrl: publicUrl, 
-      isVideo: isVideo
+      isVideo: isVideo,
+      filePath: filePath,
+      fileName: fileName
     });
+    
+    // セッション情報は一定時間保持して、ファイル情報確認APIで使えるようにする
+    setTimeout(() => {
+      delete uploadSessions[sessionId];
+    }, 30 * 60 * 1000); // 30分後に削除
     
   } catch (error) {
     console.error(`セッション ${sessionId} 完了エラー:`, error);
@@ -1445,25 +1456,142 @@ app.post('/upload-session/complete', authenticateToken, async (req, res) => {
   }
 });
 
-// アップロードセッション中止
-app.post('/upload-session/abort', authenticateToken, (req, res) => {
-  const { sessionId } = req.body;
-  const session = uploadSessions[sessionId];
-  
-  if (!session) {
-    return res.status(404).json({ error: 'セッションが見つかりません' });
-  }
-  
+// 新規: アップロードファイル情報取得エンドポイント
+app.get('/upload-info/:sessionId', async (req, res) => {
   try {
-    // セッションディレクトリとファイルを削除
-    fsSync.rmdirSync(session.sessionDir, { recursive: true });
-    delete uploadSessions[sessionId];
+    const { sessionId } = req.params;
+    console.log(`アップロード情報リクエスト: ${sessionId}`);
     
-    console.log(`セッション ${sessionId}: ユーザーによる中止`);
-    res.json({ success: true, message: 'アップロードをキャンセルしました' });
+    // アップロードセッション情報から確認
+    const session = uploadSessions[sessionId];
+    
+    if (session && session.status === 'completed' && session.publicUrl) {
+      console.log(`セッション情報から取得: ${sessionId} -> ${session.publicUrl}`);
+      return res.json({
+        url: session.publicUrl,
+        isVideo: session.isVideo,
+        fileName: session.filename,
+        filePath: session.filePath,
+        status: 'completed'
+      });
+    }
+    
+    // Cloud Storageで可能性があるパスを確認
+    const possiblePaths = [
+      `uploads/${sessionId}.mp4`,
+      `uploads/${sessionId}.jpg`,
+      `uploads/${sessionId}.png`,
+      `uploads/${sessionId}.gif`,
+      `uploads/${sessionId}.webp`,
+      `uploads/${sessionId}-*`, // ワイルドカード検索
+    ];
+    
+    for (const pathPattern of possiblePaths) {
+      try {
+        const [files] = await bucket.getFiles({ prefix: pathPattern.replace('*', '') });
+        
+        if (files && files.length > 0) {
+          // 最新のファイルを選択
+          const file = files[0]; // 通常は1つだけのはず
+          await file.makePublic();
+          
+          const publicUrl = `https://storage.googleapis.com/${bucketName}/${file.name}`;
+          console.log(`Cloud Storageから発見: ${sessionId} -> ${publicUrl}`);
+          
+          return res.json({
+            url: publicUrl,
+            fileName: file.name.split('/').pop(),
+            filePath: file.name,
+            isVideo: file.name.endsWith('.mp4') || file.name.endsWith('.webm'),
+            status: 'found_in_storage'
+          });
+        }
+      } catch (err) {
+        console.log(`パターン ${pathPattern} の検索でエラー:`, err.message);
+      }
+    }
+    
+    // ファイルが見つからない
+    console.log(`ファイル情報が見つかりません: ${sessionId}`);
+    res.status(404).json({ error: 'ファイル情報が見つかりません' });
+    
   } catch (error) {
-    console.error(`セッション ${sessionId} 中止エラー:`, error);
-    res.status(500).json({ error: 'セッション中止処理に失敗しました' });
+    console.error('ファイル情報取得エラー:', error);
+    res.status(500).json({ error: '内部サーバーエラー' });
+  }
+});
+
+// file-info エンドポイントも追加（代替パス）
+app.get('/file-info', async (req, res) => {
+  try {
+    const { sessionId } = req.query;
+    if (!sessionId) {
+      return res.status(400).json({ error: 'sessionIdが必要です' });
+    }
+    
+    console.log(`ファイル情報リクエスト(代替パス): ${sessionId}`);
+    
+    // upload-info エンドポイントにリダイレクト
+    const uploadInfoResponse = await new Promise(resolve => {
+      const mockRes = {
+        status: function(code) {
+          this.statusCode = code;
+          return this;
+        },
+        json: function(data) {
+          this.data = data;
+          resolve(this);
+        }
+      };
+      app._router.handle({ 
+        path: `/upload-info/${sessionId}`, 
+        method: 'GET',
+        query: {}, 
+        params: { sessionId }
+      }, mockRes);
+    });
+    
+    if (uploadInfoResponse.statusCode === 200) {
+      return res.json(uploadInfoResponse.data);
+    } else {
+      return res.status(uploadInfoResponse.statusCode).json(uploadInfoResponse.data);
+    }
+  } catch (error) {
+    console.error('ファイル情報取得エラー (代替):', error);
+    res.status(500).json({ error: '内部サーバーエラー' });
+  }
+});
+
+// file-metadata エンドポイント（もう一つの代替パス）
+app.get('/file-metadata/:sessionId', async (req, res) => {
+  try {
+    const uploadInfoRes = await new Promise(resolve => {
+      const mockRes = {
+        status: function(code) {
+          this.statusCode = code;
+          return this;
+        },
+        json: function(data) {
+          this.data = data;
+          resolve(this);
+        }
+      };
+      app._router.handle({ 
+        path: `/upload-info/${req.params.sessionId}`, 
+        method: 'GET', 
+        query: {}, 
+        params: { sessionId: req.params.sessionId }
+      }, mockRes);
+    });
+    
+    if (uploadInfoRes.statusCode === 200) {
+      return res.json(uploadInfoRes.data);
+    } else {
+      return res.status(uploadInfoRes.statusCode).json(uploadInfoRes.data);
+    }
+  } catch (error) {
+    console.error('ファイル情報取得エラー (代替2):', error);
+    res.status(500).json({ error: '内部サーバーエラー' });
   }
 });
 
@@ -1788,6 +1916,188 @@ app.get('/user/posts', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'サーバーエラーが発生しました' });
   }
 });
+
+// Resumable Uploadsセッション情報を保存するオブジェクト
+const resumableSessions = {};
+
+// Resumable Upload用のURLを生成するエンドポイント
+app.post('/create-resumable-upload', authenticateToken, async (req, res) => {
+  try {
+    const { filename, fileType, fileSize } = req.body;
+    
+    if (!filename || !fileType) {
+      return res.status(400).json({ error: 'ファイル名とファイルタイプは必須です' });
+    }
+    
+    console.log(`Resumable Upload開始リクエスト: ${filename}, タイプ: ${fileType}, サイズ: ${(fileSize / (1024 * 1024)).toFixed(2)}MB`);
+    
+    // セッションIDを生成
+    const sessionId = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+    
+    // Cloud Storageへのパス
+    const filePath = `uploads/${sessionId}-${filename.replace(/\s+/g, '-')}`;
+    
+    try {
+      // Resumable Uploadの初期化
+      const [resumableUrl] = await bucket.file(filePath).createResumableUpload({
+        metadata: {
+          contentType: fileType,
+        },
+        origin: '*' // CORSの設定
+      });
+      
+      // セッション情報を保存
+      resumableSessions[sessionId] = {
+        userId: req.user.id,
+        filename,
+        fileType,
+        filePath,
+        createdAt: new Date(),
+        status: 'created'
+      };
+      
+      console.log(`Resumable Upload URL生成成功: ${sessionId}`);
+      
+      // クライアントにURLとセッションIDを返す
+      res.json({
+        uploadUrl: resumableUrl,
+        sessionId,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
+      });
+    } catch (error) {
+      console.error('Resumable Upload URL生成エラー:', error);
+      res.status(500).json({ error: 'アップロードURLの生成に失敗しました: ' + error.message });
+    }
+  } catch (error) {
+    console.error('Resumable Uploadセッション作成エラー:', error);
+    res.status(500).json({ error: '内部サーバーエラー: ' + error.message });
+  }
+});
+
+// Resumable Upload完了処理エンドポイント
+app.post('/finalize-upload/:sessionId', authenticateToken, async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    
+    // セッション情報の検証
+    const session = resumableSessions[sessionId];
+    if (!session) {
+      return res.status(404).json({ error: 'アップロードセッションが見つかりません' });
+    }
+    
+    // ユーザーIDの検証
+    if (session.userId !== req.user.id) {
+      return res.status(403).json({ error: '不正なセッションアクセス' });
+    }
+    
+    console.log(`Resumable Upload完了リクエスト: ${sessionId}, ファイル: ${session.filePath}`);
+    
+    // ファイルの存在確認
+    const file = bucket.file(session.filePath);
+    const [exists] = await file.exists();
+    
+    if (!exists) {
+      return res.status(404).json({ error: 'アップロードされたファイルが見つかりません' });
+    }
+    
+    // ファイルを公開設定に
+    try {
+      await file.makePublic();
+    } catch (err) {
+      console.warn('ファイル公開設定スキップ:', err.message);
+      // エラーは無視して続行
+    }
+    
+    // 公開URL生成
+    const publicUrl = `https://storage.googleapis.com/${bucketName}/${session.filePath}`;
+    
+    // 成功レスポンス
+    res.json({
+      imageUrl: publicUrl,
+      isVideo: session.fileType.startsWith('video/'),
+      filePath: session.filePath
+    });
+    
+    // セッション情報をアップデート
+    session.status = 'completed';
+    session.completedAt = new Date();
+    session.publicUrl = publicUrl;
+    
+    // 一定時間後にセッション情報を削除（メモリリーク防止）
+    setTimeout(() => {
+      delete resumableSessions[sessionId];
+    }, 60 * 60 * 1000); // 1時間後
+    
+  } catch (error) {
+    console.error('アップロード完了処理エラー:', error);
+    res.status(500).json({ error: '内部サーバーエラー: ' + error.message });
+  }
+});
+
+// Resumable Uploadキャンセル
+app.delete('/cancel-upload/:sessionId', authenticateToken, async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const session = resumableSessions[sessionId];
+    
+    if (!session) {
+      return res.status(404).json({ error: 'セッションが見つかりません' });
+    }
+    
+    if (session.userId !== req.user.id) {
+      return res.status(403).json({ error: '不正なセッションアクセス' });
+    }
+    
+    // アップロード中のファイルを削除
+    try {
+      const file = bucket.file(session.filePath);
+      const [exists] = await file.exists();
+      
+      if (exists) {
+        await file.delete();
+      }
+    } catch (error) {
+      console.warn('アップロードファイル削除エラー:', error);
+    }
+    
+    // セッション情報を削除
+    delete resumableSessions[sessionId];
+    
+    res.json({ success: true, message: 'アップロードがキャンセルされました' });
+  } catch (error) {
+    console.error('アップロードキャンセルエラー:', error);
+    res.status(500).json({ error: '内部サーバーエラー' });
+  }
+});
+
+// 古いアップロードセッションをクリーンアップする定期実行タスク
+setInterval(() => {
+  const now = new Date();
+  const sessionTimeout = 24 * 60 * 60 * 1000; // 24時間
+  
+  // Resumable Uploadセッションのクリーンアップ
+  for (const [sessionId, session] of Object.entries(resumableSessions)) {
+    const sessionAge = now - new Date(session.createdAt);
+    
+    if (sessionAge > sessionTimeout) {
+      console.log(`古いResumableアップロードセッション ${sessionId} を削除します`);
+      
+      // 未完了のファイルがあれば削除
+      try {
+        if (session.status !== 'completed') {
+          const file = bucket.file(session.filePath);
+          file.delete().catch(err => {
+            console.warn(`ファイル削除エラー (${session.filePath}):`, err);
+          });
+        }
+      } catch (error) {
+        console.error(`セッション ${sessionId} クリーンアップエラー:`, error);
+      }
+      
+      delete resumableSessions[sessionId];
+    }
+  }
+}, 3600000); // 1時間ごとに実行
 
 // サーバー起動時にデータ構造を確認
 const PORT = process.env.PORT || 8080;
