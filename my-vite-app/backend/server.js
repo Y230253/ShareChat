@@ -258,7 +258,7 @@ function authenticateToken(req, res, next) {
   
   if (!authHeader) {
     console.log('Authorization ヘッダーがありません')
-    return res.status(401).json({ error: 'トークンがありません' })
+    return res.status(401).json({ error: 'トークンがありません', code: 'token_missing' })
   }
   
   console.log('Authorization ヘッダー:', authHeader.substring(0, 15) + '...')
@@ -266,7 +266,7 @@ function authenticateToken(req, res, next) {
   const token = authHeader.split(' ')[1]
   if (!token) {
     console.log('Bearerトークンが見つかりません')
-    return res.status(401).json({ error: 'トークン形式が不正です' })
+    return res.status(401).json({ error: 'トークン形式が不正です', code: 'token_invalid' })
   }
   
   console.log('トークン検証開始:', token.substring(0, 10) + '...')
@@ -275,7 +275,19 @@ function authenticateToken(req, res, next) {
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
       console.error('トークン検証エラー:', err.message)
-      return res.status(403).json({ error: '無効なトークン: ' + err.message })
+      
+      // エラータイプに基づいたより具体的なエラーコードを返す
+      let errorCode = 'token_invalid';
+      if (err.name === 'TokenExpiredError') {
+        errorCode = 'token_expired';
+      } else if (err.name === 'JsonWebTokenError') {
+        errorCode = 'token_malformed';
+      }
+      
+      return res.status(403).json({ 
+        error: '無効なトークン: ' + err.message,
+        code: errorCode 
+      })
     }
     
     console.log('トークン検証成功:', user.id)
@@ -322,7 +334,7 @@ async function handleLogin(req, res) {
     const token = jwt.sign(
       { id: user.id, email: user.email, username: user.username },
       JWT_SECRET,
-      { expiresIn: '24h' }
+      { expiresIn: '30d' }  // 有効期限を24時間から30日に延長
     );
 
     // ユーザー情報からパスワードを除外
@@ -777,7 +789,7 @@ app.get('/api/debug/mock-token/:userId', async (req, res) => {
     const token = jwt.sign(
       { id: user.id, email: user.email, username: user.username },
       JWT_SECRET,
-      { expiresIn: '24h' }
+      { expiresIn: '30d' }  // こちらも30日に変更
     );
     
     // パスワードを除外したユーザー情報を返す

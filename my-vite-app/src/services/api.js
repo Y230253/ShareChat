@@ -36,7 +36,7 @@ const withTimeout = (promise, ms = 10000) => {
   return Promise.race([promise, timeout]);
 };
 
-// API呼び出し関数
+// API呼び出し関数の強化 - トークン期限切れの処理を追加
 export async function apiCall(endpoint, options = {}) {
   // URLの正規化（localhostへの参照を避ける）
   const url = `${API_BASE_URL}${endpoint}`;
@@ -93,6 +93,26 @@ export async function apiCall(endpoint, options = {}) {
       }
       
       console.error(`API エラー (${response.status}):`, errorText || response.statusText);
+      
+      // トークン期限切れエラーの処理
+      if (response.status === 403 && (errorText.includes('jwt expired') || 
+          (errorDetails && errorDetails.code === 'token_expired'))) {
+        
+        console.warn('認証トークンの期限切れが検出されました。再認証が必要です。');
+        
+        // ローカルストレージからトークンを削除
+        localStorage.removeItem('token');
+        
+        // イベントをディスパッチしてアプリに通知
+        window.dispatchEvent(new CustomEvent('auth:token_expired'));
+        
+        // トークン更新を試みるか、ログインページにリダイレクト
+        if (window.location.pathname !== '/login') {
+          alert('セッションの期限が切れました。再ログインが必要です。');
+          window.location.href = '/login';
+          return null; // リダイレクト後は処理を中断
+        }
+      }
       
       // 特定のエンドポイントで404エラーの場合、モックデータを返す
       if (response.status === 404) {
