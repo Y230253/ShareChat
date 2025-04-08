@@ -972,13 +972,26 @@ const auth = {
   // 既存のメソッド
   
   getUser: async () => {
-    console.log('API: Getting user data');
+    console.log('API: ユーザー情報取得');
     try {
-      const response = await apiCall('/user', { method: 'GET' });
-      console.log('API: User data received', response);
-      return response;
+      // 正しいエンドポイントが複数ある可能性を考慮
+      const possibleEndpoints = ['/user', '/auth/me', '/api/user/me'];
+      
+      for (const endpoint of possibleEndpoints) {
+        try {
+          const response = await apiCall(endpoint, { method: 'GET' });
+          console.log('API: ユーザー情報取得成功', response);
+          return response;
+        } catch (endpointError) {
+          console.log(`${endpoint} でのユーザー情報取得失敗:`, endpointError.message);
+          // エラーを投げずに次のエンドポイントを試す
+        }
+      }
+      
+      // すべてのエンドポイントが失敗した場合
+      throw new Error('すべてのユーザー情報取得エンドポイントが失敗');
     } catch (err) {
-      console.error('API: Failed to get user data', err);
+      console.error('API: ユーザー情報取得失敗', err);
       throw err;
     }
   },
