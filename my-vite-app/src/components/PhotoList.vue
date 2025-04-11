@@ -70,7 +70,9 @@ const batchSize = ref(5); // 追加で表示する数
 // 表示する投稿を計算
 const visiblePosts = computed(() => {
   const posts = props.photos.length > 0 ? props.photos : photosData.value;
-  return posts.slice(0, visiblePostCount.value);
+  // 表示順を逆にして最新の投稿を上に表示
+  const reversedPosts = [...posts].reverse();
+  return reversedPosts.slice(0, visiblePostCount.value);
 });
 
 // スクロールイベントハンドラ
@@ -135,8 +137,9 @@ watch(() => props.photos, (newPhotos) => {
       <button @click="loadPosts">再読み込み</button>
     </div>
     <ul v-else :style="{ display: 'grid', gap: '1rem', gridTemplateColumns: `repeat(${columns}, 1fr)` }">
-      <li v-for="photo in [...visiblePosts].reverse()" :key="photo.id">
-      <photoItem :photo="photo" />
+      <!-- reverse()を削除し、最新順のままで表示 -->
+      <li v-for="photo in visiblePosts" :key="photo.id">
+        <photoItem :photo="photo" />
       </li>
     </ul>
     <!-- もっと読み込むボタン（オプション） -->

@@ -8,8 +8,57 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <!-- アセットの直接参照を保証するためのスクリプト修正 -->
+    <!-- base要素を追加してルートパスを明確に -->
+    <base href="/">
+    <!-- 404エラーハンドリングとNoSuchKey対策のスクリプト -->
     <script>
+      // NoSuchKeyエラー検出と修正
+      (function() {
+        function isStorageError() {
+          return (
+            document.body && 
+            document.body.textContent && 
+            document.body.textContent.includes('NoSuchKey')
+          );
+        }
+        
+        function redirectToRoot() {
+          // URLからハッシュとクエリを保持
+          const hash = window.location.hash;
+          const search = window.location.search;
+          window.location.href = '/' + (search || '') + (hash || '');
+        }
+
+        // XMLエラーのチェック（DOMContentLoadedで検出）
+        window.addEventListener('DOMContentLoaded', function() {
+          if (isStorageError()) {
+            console.warn('NoSuchKeyエラーを検出しました - リダイレクトします');
+            redirectToRoot();
+          }
+        });
+        
+        // ロード失敗のハンドリング
+        window.addEventListener('error', function(event) {
+          if (event.target.tagName === 'LINK' || event.target.tagName === 'SCRIPT') {
+            console.warn('リソース読み込みエラー:', event.target.src || event.target.href);
+            
+            if ((event.target.src || '').includes('sharechat-media-bucket/frontend/')) {
+              // パスの修正を試みる
+              const correctPath = (event.target.src || '')
+                .replace('sharechat-media-bucket/frontend/', 'sharechat-media-bucket/');
+              
+              // リソースのパスを修正
+              if (event.target.tagName === 'SCRIPT') {
+                event.target.src = correctPath;
+              } else {
+                event.target.href = correctPath;
+              }
+            }
+          }
+        }, true);
+      })();
+      
+      // アセットベースパスの設定
       window.ASSET_BASE_PATH = '';
       try {
         // 認証URLの場合はフルパスを使用
@@ -38,8 +87,8 @@
       }
     </script>
     <title>Shacha!!</title>
-    <script type="module" crossorigin src="./assets/index.DHT3c-.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index.C2zDOX.css">
+    <script type="module" crossorigin src="./assets/index.CBJVEr.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index.ZUBgf7.css">
   </head>
   <body>
     <div id="app"></div>

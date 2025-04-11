@@ -58,6 +58,19 @@ const app = createApp(App);
 app.use(router);
 app.mount('#app');
 
+// サービスワーカーを登録
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js')
+      .then(registration => {
+        console.log('ServiceWorker登録成功:', registration.scope);
+      })
+      .catch(error => {
+        console.log('ServiceWorker登録失敗:', error);
+      });
+  });
+}
+
 // グローバルエラーハンドラーを追加
 app.config.errorHandler = (err, instance, info) => {
   console.error('Vue Error:', err);
